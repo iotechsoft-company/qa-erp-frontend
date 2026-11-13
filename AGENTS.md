@@ -1,0 +1,45 @@
+# AGENTS.md — qa-erp-frontend
+
+E2E test suite for **erp-frontend** (Next.js 16 / React 19 / MUI / next-intl locale `th`).
+Source of the app under test: `/Users/PEEPO/Project/nextjs/erp-frontend` (read it to find routes, labels, `name=` attributes).
+Target URL comes from `BASE_URL` in `.env`.
+
+## Stack
+
+Playwright Test + TypeScript · pnpm · zod (env validation) · @faker-js/faker · ESLint (eslint-plugin-playwright) · Prettier
+
+## Commands
+
+- `pnpm install && pnpm install:browsers`
+- `pnpm test` / `pnpm test:smoke` / `pnpm test:regression` / `pnpm test:ui`
+- `pnpm check-types && pnpm lint` — must pass before finishing any task
+
+## Layout
+
+- `src/config/env.ts` — the ONLY place reading `process.env`
+- `src/pages/*.page.ts` — Page Objects extending `BasePage`; export from `src/pages/index.ts`
+- `src/fixtures/test.ts` — custom `test` with page fixtures + `api` + `allowMutation`. **Always import `test`/`expect` from `@fixtures/test`**, not `@playwright/test`
+- `src/api/api-client.ts` — seed/cleanup via same-origin `/api/<bc-prefix>/v1/...` (JSON:API envelope)
+- `src/data/factories/` — realistic Thai test data. `thai.ts` = primitives (address w/ real postcodes, valid 13-digit tax id, phone, company, product catalog); `index.ts` = `buildCustomer/buildSupplier/buildProduct` matching Create*DTO
+- `tests/api/` — factory ↔ API contract tests (catch DTO drift before UI tests do)
+- `src/data/routes.ts` — list of private routes (mirror of `apps/web/app/(private)/**/page.tsx`)
+- `tests/setup/` — login once → `.auth/user.json` · `tests/auth/` — runs as guest (no session) · everything else runs logged-in
+
+## Rules
+
+1. Locators: `getByRole` / `getByLabel` first (Thai accessible names from `packages/*/translation/th/*.json` in the ERP repo) → `input[name=...]` → `getByTestId`. Never MUI class names (`.MuiXxx-root`, `.css-xxxx`).
+2. No `waitForTimeout`, no `networkidle`, no `force: true`. Use web-first assertions (`await expect(locator).toBeVisible()`).
+3. Tags: `@smoke` (read-only, safe on any env) · `@regression` · `@mutation` (writes data) + a module tag (`@inventory`, `@sales`, `@purchasing`, `@auth`, ...).
+4. Any test that creates/updates/deletes data must use the `allowMutation` fixture, build data with a factory from `@data/factories` (names realistic, **`code`/`sku` prefixed `E2E-`**), and clean up via `api` (`try/finally` or `afterEach`).
+5. Tests are independent — no ordering between tests; seed what you need via `api`.
+6. Never commit credentials, `.env`, `.auth/`, or the backend API domain. API calls go through `BASE_URL/api/*` only.
+7. Test titles may be Thai; describe blocks name the feature.
+8. Never type a wrong password for a real account (backend locks it — `userBlocked`); use a non-existent username.
+9. Use `BasePage.alert` for MUI alerts — `getByRole('alert')` also matches Next.js's hidden `#__next-route-announcer__`.
+
+## API gotchas (verified)
+
+- Responses are JSON:API: `{ data: { id, attributes } }`; i18n fields come back as `name: { th, en }` even though create takes `name_th`/`name_en`.
+- The `api` fixture uses its own request context (no browser cookies) + sends `x-csrf-token`; reusing the page's `request` fixture → 403 "Missing or invalid CSRF token".
+- Products attach only to a **leaf** item group: lookup with `filter: 'is_group||$eq||false'`.
+- Creating an IAM user returns `temp_password`; the user must `POST /auth/v1/auth/change-password` before other calls (handled by `provision:users`).

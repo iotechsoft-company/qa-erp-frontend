@@ -1,0 +1,51 @@
+# ─── Dependencies ───────────────────────────────────────
+node_modules/
+.pnpm-store/
+
+# ─── Secrets / credentials ──────────────────────────────
+# .env มี username/password ของ test users — ห้าม commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ─── Playwright auth state (มี access/refresh token) ─────
+.auth/
+playwright/.auth/
+
+# ─── OpenAPI specs (ดึงจาก dev ด้วย `pnpm fetch:openapi`) ───
+.openapi/
+
+# ─── Test output / reports ──────────────────────────────
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+allure-results/
+allure-report/
+coverage/
+*.trace.zip
+
+# ─── Tooling cache ──────────────────────────────────────
+.eslintcache
+*.tsbuildinfo
+.turbo/
+
+# ─── Logs ───────────────────────────────────────────────
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# ─── OS / Editor ────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+
+# ─── AI agent local state ───────────────────────────────
+.claude/settings.local.json
+.codex/

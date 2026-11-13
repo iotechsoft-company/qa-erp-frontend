@@ -1,0 +1,43 @@
+{
+  "name": "qa-erp-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "E2E automation tests for erp-frontend (Playwright + TypeScript)",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:smoke": "playwright test --grep @smoke",
+    "test:regression": "playwright test --grep @regression",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "codegen": "playwright codegen",
+    "report": "playwright show-report",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "check-types": "tsc --noEmit",
+    "install:browsers": "playwright install --with-deps chromium",
+    "test:api": "playwright test --grep @api",
+    "provision:users": "node scripts/provision-test-users.ts",
+    "fetch:openapi": "node scripts/fetch-openapi.ts",
+    "cleanup:e2e": "node scripts/cleanup-e2e-data.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@11.22.0",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@faker-js/faker": "^10.6.0",
+    "@playwright/test": "^1.65.0",
+    "@types/node": "^26.6.6",
+    "dotenv": "^18.0.10",
+    "eslint": "^10.14.0",
+    "eslint-plugin-playwright": "^2.12.2",
+    "prettier": "^3.10.1",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.72.2",
+    "zod": "^4.6.7"
+  }
+}
