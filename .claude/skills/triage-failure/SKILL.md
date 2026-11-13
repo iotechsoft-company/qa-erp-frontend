@@ -5,6 +5,8 @@ description: Diagnose failing Playwright tests in qa-erp-frontend (local run or 
 
 # Triage failing E2E tests
 
+> Works in Claude Code (`/skill-name`, `.claude/skills/`) and Codex (`$skill-name`, `.agents/skills/` → symlink). Other skills referenced below live next to this one.
+
 Goal: for every failing test, one verdict + one action. Never "fix" an app bug by weakening the test.
 
 ## 1. Collect failures
@@ -17,12 +19,12 @@ pnpm exec playwright test --last-failed --trace=on --reporter=list
 ```bash
 gh run list -R iotechsoft-company/qa-erp-frontend -w e2e.yml -L 5
 gh run view <run-id> -R iotechsoft-company/qa-erp-frontend --log-failed | tail -100
-gh run download <run-id> -R iotechsoft-company/qa-erp-frontend -n playwright-report -D <scratchpad>/report-<run-id>
+gh run download <run-id> -R iotechsoft-company/qa-erp-frontend -n playwright-report -D "$(mktemp -d)/report-<run-id>"
 ```
 
 Per failure, read in this order (cheapest first):
 1. `test-results/<test-dir>/error-context.md` — the error + an ARIA snapshot of the page at failure time
-2. the screenshot `test-failed-1.png` (Read tool shows images)
+2. the screenshot `test-failed-1.png` (open/view the image)
 3. the trace, only if still unclear: `pnpm exec playwright show-trace test-results/<test-dir>/trace.zip`
    (network tab: look for 4xx/5xx under `/api/`)
 

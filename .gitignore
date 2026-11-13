@@ -48,4 +48,5 @@ Thumbs.db
 
 # ─── AI agent local state ───────────────────────────────
 .claude/settings.local.json
-.codex/
+.codex/*
+!.codex/config.toml

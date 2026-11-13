@@ -5,6 +5,8 @@ description: Write a new Playwright E2E spec (and its page objects, factories, c
 
 # Write an E2E spec for erp-frontend
 
+> Works in Claude Code (`/skill-name`, `.claude/skills/`) and Codex (`$skill-name`, `.agents/skills/` → symlink). Other skills referenced below live next to this one.
+
 Conventions live in `AGENTS.md` — read it first. This skill is the step-by-step that applies them.
 
 ## 1. Understand the feature (before any code)

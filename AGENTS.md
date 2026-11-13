@@ -37,14 +37,19 @@ Playwright Test + TypeScript · pnpm · zod (env validation) · @faker-js/faker 
 8. Never type a wrong password for a real account (backend locks it — `userBlocked`); use a non-existent username.
 9. Use `BasePage.alert` for MUI alerts — `getByRole('alert')` also matches Next.js's hidden `#__next-route-announcer__`.
 
-## QA tooling (Claude Code skills & MCP — Codex: read the SKILL.md files as instructions)
+## QA tooling (shared by Claude Code and Codex)
+Skills: source of truth is `.claude/skills/<name>/SKILL.md`; `.agents/skills/<name>` are symlinks so Codex discovers the same files.
+Invoke: Claude Code `/triage-failure` · Codex `$triage-failure` (both also auto-trigger from the description).
+Playwright MCP: Claude Code reads `.mcp.json`, Codex reads `.codex/config.toml` (project must be **trusted** in Codex) — keep them in sync.
+New skill → create it under `.claude/skills/<name>/`, then `ln -s ../../.claude/skills/<name> .agents/skills/<name>`.
+
 | Need | Use |
 |---|---|
 | Test failed / CI red | `.claude/skills/triage-failure` → classify flaky / test bug / data-env / app bug |
 | Test passes only sometimes | `.claude/skills/flaky-hunter` → measure with `--repeat-each`, deterministic fix |
 | New spec for a page/flow | `.claude/skills/write-e2e-spec` → ERP source → locators → POM → factory → spec |
 | App bug confirmed | `.claude/skills/report-bug` → GitHub issue in erp-api / erp-frontend |
-| Explore a live page / find locators | Playwright MCP (`.mcp.json`, starts logged in from `.auth/user.json` — run `pnpm auth` first; passwords from `.env` are masked) |
+| Explore a live page / find locators | Playwright MCP (`.mcp.json` / `.codex/config.toml`, starts logged in from `.auth/user.json` — run `pnpm auth` first; passwords from `.env` are masked) |
 | Throwaway recon script | `.claude/skills/webapp-testing` (vendored from anthropics/skills @ `2c5958e`, Apache-2.0). Python Playwright, uses `networkidle`/timeouts — **recon only, never copy its patterns into specs** |
 
 ## Found an app bug?

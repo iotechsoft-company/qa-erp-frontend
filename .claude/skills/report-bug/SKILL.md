@@ -5,6 +5,8 @@ description: File a GitHub issue to iotechsoft-company/erp-api or iotechsoft-com
 
 # Report bug found by E2E → GitHub issue
 
+> Works in Claude Code (`/skill-name`, `.claude/skills/`) and Codex (`$skill-name`, `.agents/skills/` → symlink). Other skills referenced below live next to this one.
+
 The QA suite targets the **dev** env (`BASE_URL` in `.env`). When a failure is a defect in the app, file it
 with `gh` to the repo that owns the defect. The user has pre-approved filing issues; don't ask before filing,
 but do the checks below. Tell the user each issue URL you created.
@@ -53,11 +55,11 @@ If one exists → add a comment with the new occurrence (date, commit, run link)
 
 ## 3. Write the body (Thai, same style as existing erp-api issues)
 
-Write it to the scratchpad, never into the repo. Template:
+Write it to a temp dir outside the repo (`TMP=$(mktemp -d)`), never into the repo. Template:
 
 ~~~markdown
 <!-- qa-e2e key=<KEY> -->
-> filed by qa-erp-frontend E2E via Claude Code
+> filed by qa-erp-frontend E2E via <Claude Code | Codex>
 > env: dev · found <YYYY-MM-DD>
 > test: https://github.com/iotechsoft-company/qa-erp-frontend/blob/<qa-commit-sha>/<spec-path>#L<line>
 > CI run: <url, if found in CI>
@@ -93,7 +95,7 @@ Rules for the body:
   Usernames `e2e.admin` / `e2e.staff` are fine.
 - Run the check below; it must print `clean`:
   ```bash
-  BODY=<scratchpad>/issue.md
+  BODY=$TMP/issue.md
   for k in E2E_PASSWORD E2E_STAFF_PASSWORD ADMIN_PASSWORD; do v=$(grep "^$k=" .env | cut -d= -f2-); [ -n "$v" ] && grep -qF "$v" "$BODY" && echo "LEAK $k"; done
   grep -qiE 'bearer [a-z0-9._-]{20,}|eyJ[a-zA-Z0-9_-]{10,}|erp-api\.' "$BODY" && echo "LEAK token/domain" || echo clean
   ```

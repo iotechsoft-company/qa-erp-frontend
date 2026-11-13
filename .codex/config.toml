@@ -1,0 +1,15 @@
+# Project-scoped Codex config — loaded only when this project is trusted in Codex.
+# Mirrors .mcp.json (Claude Code). Keep both in sync when changing the Playwright MCP setup.
+
+[mcp_servers.playwright]
+command = "npx"
+args = [
+  "-y", "@playwright/mcp@0.0.83",
+  "--isolated",
+  "--storage-state", ".auth/user.json",   # run `pnpm auth` first
+  "--secrets", ".env",                     # mask passwords from model output
+  "--output-dir", "test-results/mcp",
+  "--viewport-size", "1440x900",
+]
+startup_timeout_sec = 60   # first npx download can exceed the 10s default
+tool_timeout_sec = 120

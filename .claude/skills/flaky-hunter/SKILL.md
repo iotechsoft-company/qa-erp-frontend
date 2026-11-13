@@ -5,10 +5,12 @@ description: Find and fix flaky Playwright tests in qa-erp-frontend by running t
 
 # Hunt flaky tests
 
+> Works in Claude Code (`/skill-name`, `.claude/skills/`) and Codex (`$skill-name`, `.agents/skills/` → symlink). Other skills referenced below live next to this one.
+
 ## 1. Measure
 
 ```bash
-OUT=<scratchpad>/flaky.json
+OUT=$(mktemp -d)/flaky.json
 pnpm exec playwright test <file-or-dir> --repeat-each=10 --workers=4 --retries=0 --reporter=json > "$OUT"
 python3 - "$OUT" <<'PY'
 import json, sys, collections
