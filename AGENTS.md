@@ -4,6 +4,8 @@ E2E test suite for **erp-frontend** (Next.js 16 / React 19 / MUI / next-intl loc
 Source of the app under test: `/Users/PEEPO/Project/nextjs/erp-frontend` (read it to find routes, labels, `name=` attributes).
 Target URL comes from `BASE_URL` in `.env`.
 
+**Working with another agent:** read `docs/WORKFLOW.md` first — Codex builds on `codex/<module>` branches, Claude reviews/owns platform from its own worktree, everything lands on `main` via PR only.
+
 ## Stack
 
 Playwright Test + TypeScript · pnpm · zod (env validation) · @faker-js/faker · ESLint (eslint-plugin-playwright) · Prettier
