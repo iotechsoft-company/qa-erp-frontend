@@ -17,7 +17,7 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 
 - [x] Shared components POM: data table (rows/columns, sort API, pagination), search box, inline filter, confirm dialog, snackbar/alert, MUI select/autocomplete. Inventory uses inline filters; no filter drawer is rendered.
 - [x] inventory: products, item-groups, product-groups — list + create/edit forms, read-only search/pagination, UI CRUD and Thai required-field validation. Sort UI remains unavailable (see Phase 2 verification).
-- [ ] customer: customers · supplier: purchasers
+- [ ] customer: customers · supplier: purchasers — implemented, awaiting PR review/merge: list/search/pagination, create/edit POMs, company + individual UI CRUD, delete cancellation, Thai required/length and module-specific validation.
 - [ ] sales: quotations, orders, delivery-notes, create
 - [ ] purchasing: orders, goods-receipts, create
 - [ ] reports: sales, purchases (filters + export)
@@ -65,4 +65,19 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 - `pnpm check-types && pnpm lint`: passed, 0 errors / 0 warnings.
 - `pnpm test --reporter=list`: exit 0; 46 executions counted as passed by the runner (45 ordinary passes, 1 expected failure for erp-api#13), no retries/skips/fixmes.
 - `pnpm exec playwright test --repeat-each=2 tests/inventory --reporter=list`: 25 passed (12 inventory tests × 2 + auth setup), no retries or failures.
+- `pnpm cleanup:e2e` (dry-run): exit 0; 0 E2E records in customers, suppliers, products, item-groups and uoms.
+
+## Customers / purchasers verification (2026-11-13)
+
+- Added `CustomersPage`, `PurchasersPage`, and their shared `PartyListPage`, using shared table/search/select/confirm/notification POMs. Fixtures and page exports are registered.
+- 16 new UI tests: 4 read-only smoke, 6 validation, 4 company/individual CRUD, and 2 cancel-delete tests. All mutation cases build E2E-prefixed data and clean up through the separate API fixture, including partial UI success.
+- Validation covers required code/name/tax ID; code/name/tax ID/phone length; negative customer credit limit/terms; supplier country/currency lengths and payment terms length. Messages come from the respective Thai translations.
+- Supplier individual factories now generate a Thai personal name, valid personal tax ID, mobile phone and non-VAT status. Added 2 API create/read/delete contracts for individual customer/supplier factories; existing customer contract now fixes company type explicitly.
+- `/purchasers` is supplier master data backed by `/api/supplier-bc/v1/suppliers`; customers use `/api/sales-bc/v1/customers`. Existing cleanup TARGETS already cover both resources, so no new entity targets were needed.
+- Shared pagination accepts an explicit endpoint and identity column for these modules; existing Inventory callers retain their behavior. Neither module currently exposes sorting controls or a list filter drawer.
+- Live accessible roles/labels work for all tested controls; no data-testid request was necessary. ERP source was read only.
+- New tests plus individual-party contracts: `pnpm exec playwright test tests/customers tests/purchasing tests/api/party-factories.spec.ts --repeat-each=3 --reporter=list` — 55 passed (18 tests × 3 + setup), no failures/retries.
+- `pnpm test --reporter=list`: exit 0, 64 executions counted as passed (63 ordinary passes + the existing expected failure for erp-api#13); no retries or skips.
+- `pnpm check-types && pnpm lint`: passed with 0 errors / 0 warnings.
+- No new app bugs were confirmed in customers/purchasers; no additional GitHub issues were filed.
 - `pnpm cleanup:e2e` (dry-run): exit 0; 0 E2E records in customers, suppliers, products, item-groups and uoms.

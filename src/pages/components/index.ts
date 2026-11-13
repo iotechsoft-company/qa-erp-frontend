@@ -40,7 +40,10 @@ export class DataTable {
     await this.root.getByRole('columnheader', { name: column, exact: true }).getByRole('button').click()
   }
 
-  async expectPagination(emptyText: string) {
+  async expectPagination(
+    emptyText: string,
+    identity?: { endpoint: string; column: string; field: 'code' },
+  ) {
     if (!(await this.next.count())) {
       await expect(this.root.getByText(emptyText, { exact: true })).toBeVisible()
       return
@@ -53,7 +56,7 @@ export class DataTable {
     const response = this.page.waitForResponse((res) => {
       const url = new URL(res.url())
       return (
-        url.pathname.startsWith('/api/inventory-bc/v1/') &&
+        (identity ? url.pathname === identity.endpoint : url.pathname.startsWith('/api/inventory-bc/v1/')) &&
         url.searchParams.get('page') === '2' &&
         res.request().method() === 'GET'
       )
@@ -61,9 +64,19 @@ export class DataTable {
     await this.goToPage(2)
     const result = await response
     expect(result.ok()).toBe(true)
-    const json = (await result.json()) as { data: { attributes: { sku?: string; name: { th: string } } }[] }
-    const column = json.data[0]?.attributes.sku ? 'รหัส SKU' : 'ชื่อภาษาไทย'
-    const values = json.data.map((row) => row.attributes.sku ?? row.attributes.name.th)
+    const json = (await result.json()) as {
+      data: {
+        attributes: {
+          sku?: string
+          code?: string
+          name: { th: string }
+        }
+      }[]
+    }
+    const column = identity?.column ?? (json.data[0]?.attributes.sku ? 'รหัส SKU' : 'ชื่อภาษาไทย')
+    const values = json.data.map((row) =>
+      identity ? row.attributes[identity.field] : (row.attributes.sku ?? row.attributes.name.th),
+    )
     await expect.poll(() => this.readColumn(column)).toEqual(values)
     await this.previous.click()
     await expect(this.page.getByRole('button', { name: 'page 1', exact: true })).toHaveAttribute('aria-current', 'page')

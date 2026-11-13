@@ -9,8 +9,8 @@ import { expect, test } from '@fixtures/test'
 test.describe('Data factories ↔ API contract', { tag: ['@regression', '@mutation', '@api'] }, () => {
   test.beforeEach(({ allowMutation }) => void allowMutation)
 
-  test('customer', async ({ api }) => {
-    const input = buildCustomer()
+  test('customer', { tag: '@customer' }, async ({ api }) => {
+    const input = buildCustomer({ customer_type: 'company' })
     expect(isValidThaiTaxId(input.tax_id)).toBe(true)
     // response คืนชื่อเป็น i18n object `name: { th, en }` (ไม่ใช่ name_th)
     const created = await api.create<{ code: string; name: { th: string } }>('/sales-bc/v1/customers', input)
@@ -21,7 +21,7 @@ test.describe('Data factories ↔ API contract', { tag: ['@regression', '@mutati
     }
   })
 
-  test('supplier', async ({ api }) => {
+  test('supplier', { tag: '@purchasing' }, async ({ api }) => {
     const input = buildSupplier()
     const created = await api.create<{ code: string }>('/supplier-bc/v1/suppliers', input)
     try {

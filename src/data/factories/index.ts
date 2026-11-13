@@ -95,6 +95,7 @@ export type SupplierInput = {
   is_vat_registered?: boolean
   supplier_type?: 'company' | 'individual'
   supplier_group_id?: string
+  payment_terms_template?: string
   contact_phone?: string
   address?: string
   country?: string
@@ -105,17 +106,18 @@ export type SupplierInput = {
 }
 
 export const buildSupplier = (overrides: Partial<SupplierInput> = {}): SupplierInput => {
+  const type = overrides.supplier_type ?? 'company'
   const c = thaiCompany()
   const addr = thaiAddress()
   return {
     code: e2eCode('SUP'),
-    name_th: c.name_th,
-    name_en: c.name_en,
-    alias: c.alias,
-    tax_id: thaiCorporateTaxId(),
-    is_vat_registered: true,
-    supplier_type: 'company',
-    contact_phone: thaiLandline(addr.phonePrefix),
+    name_th: type === 'individual' ? thaiPersonName() : c.name_th,
+    name_en: type === 'individual' ? undefined : c.name_en,
+    alias: type === 'individual' ? undefined : c.alias,
+    tax_id: type === 'individual' ? thaiPersonalTaxId() : thaiCorporateTaxId(),
+    is_vat_registered: type === 'company',
+    supplier_type: type,
+    contact_phone: type === 'individual' ? thaiMobile() : thaiLandline(addr.phonePrefix),
     address: addr.line,
     country: 'TH',
     credit_terms: faker.helpers.arrayElement([30, 45, 60, 90]),
