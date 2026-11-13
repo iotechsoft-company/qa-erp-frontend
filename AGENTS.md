@@ -37,6 +37,16 @@ Playwright Test + TypeScript · pnpm · zod (env validation) · @faker-js/faker 
 8. Never type a wrong password for a real account (backend locks it — `userBlocked`); use a non-existent username.
 9. Use `BasePage.alert` for MUI alerts — `getByRole('alert')` also matches Next.js's hidden `#__next-route-announcer__`.
 
+## QA tooling (Claude Code skills & MCP — Codex: read the SKILL.md files as instructions)
+| Need | Use |
+|---|---|
+| Test failed / CI red | `.claude/skills/triage-failure` → classify flaky / test bug / data-env / app bug |
+| Test passes only sometimes | `.claude/skills/flaky-hunter` → measure with `--repeat-each`, deterministic fix |
+| New spec for a page/flow | `.claude/skills/write-e2e-spec` → ERP source → locators → POM → factory → spec |
+| App bug confirmed | `.claude/skills/report-bug` → GitHub issue in erp-api / erp-frontend |
+| Explore a live page / find locators | Playwright MCP (`.mcp.json`, starts logged in from `.auth/user.json` — run `pnpm auth` first; passwords from `.env` are masked) |
+| Throwaway recon script | `.claude/skills/webapp-testing` (vendored from anthropics/skills @ `2c5958e`, Apache-2.0). Python Playwright, uses `networkidle`/timeouts — **recon only, never copy its patterns into specs** |
+
 ## Found an app bug?
 
 Follow `.claude/skills/report-bug/SKILL.md` (Codex: read it as instructions). Summary: triage test-bug vs app-bug →

@@ -21,7 +21,8 @@
     "test:api": "playwright test --grep @api",
     "provision:users": "node scripts/provision-test-users.ts",
     "fetch:openapi": "node scripts/fetch-openapi.ts",
-    "cleanup:e2e": "node scripts/cleanup-e2e-data.ts"
+    "cleanup:e2e": "node scripts/cleanup-e2e-data.ts",
+    "auth": "playwright test --project=setup"
   },
   "engines": {
     "node": ">=20"
