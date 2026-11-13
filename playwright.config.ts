@@ -19,7 +19,9 @@ export default defineConfig({
     baseURL: env.BASE_URL,
     locale: 'th-TH',
     timezoneId: 'Asia/Bangkok',
-    trace: 'on-first-retry',
+    // The repo is PUBLIC: CI artifacts can be downloaded by anyone. A trace contains cookies/tokens and
+    // typed values (passwords), so CI never records traces. Locally, keep traces for debugging.
+    trace: env.CI ? 'off' : 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
     actionTimeout: 15_000,

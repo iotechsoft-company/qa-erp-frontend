@@ -3,7 +3,7 @@
 // secrets, read-only ERP source). Fast (<100ms), no network. Bypass for a human: run the command yourself.
 import path from 'node:path'
 
-import { deny, describeToolCall, readDotEnv, readInput, readonlyDirs, repoRoot } from './lib.mjs'
+import { deny, describeToolCall, readDotEnv, readInput, readonlyDirs, repoRoot, run } from './lib.mjs'
 
 const EVENT = 'PreToolUse'
 const input = readInput()
@@ -30,6 +30,10 @@ if (call.kind === 'bash') {
       /\bgit\s+push\b[^|;&]*(\s--force\b|\s-f\b|\s--force-with-lease\b|\s\+\S)/,
       'Force-push is blocked for agents. Ask the user to do it manually if really needed.',
     ],
+    [
+      /\bgit\s+push\b[^|;&]*\s(\S+:)?(refs\/heads\/)?main(\s|$)/,
+      'Pushing to main is blocked — main only changes through a PR (docs/WORKFLOW.md). Push your branch and run gh pr create.',
+    ],
     [/\bgit\s+reset\s+[^|;&]*--hard\b/, `"git reset --hard" discards uncommitted changes. ${SHARED_TREE}`],
     [/\bgit\s+clean\s+[^|;&]*-[a-zA-Z]*f/, `"git clean -f" deletes untracked files. ${SHARED_TREE}`],
     [
@@ -43,6 +47,24 @@ if (call.kind === 'bash') {
     ],
   ]
   for (const [re, reason] of rules) if (re.test(cmd)) deny(EVENT, `Blocked by qa hook: ${reason}`)
+
+  // Bare `git push` / `git push origin` / `git push origin HEAD` while the checkout is on main.
+  if (/\bgit\s+push\b/.test(cmd)) {
+    const pushArgs = (cmd.match(/\bgit\s+push\b([^|;&]*)/)?.[1] ?? '')
+      .split(/\s+/)
+      .filter((a) => a && !a.startsWith('-'))
+    const refspec = pushArgs[1] // [remote, refspec]
+    if (!refspec || refspec === 'HEAD') {
+      const cwdForGit = input.cwd ?? root
+      const branch = run('git', ['rev-parse', '--abbrev-ref', 'HEAD'], cwdForGit).out.trim()
+      if (branch === 'main') {
+        deny(
+          EVENT,
+          'Blocked by qa hook: you are on main — main only changes through a PR (docs/WORKFLOW.md). Create a branch: git switch -c <agent>/<topic>.',
+        )
+      }
+    }
+  }
 
   const writeish =
     /\b(rm|mv|cp|tee|touch|mkdir)\b|\bsed\s+-i|\bperl\s+-pi|\bgit\s+(-C\s+\S+\s+)?(add|commit|push|reset|checkout|restore|clean|stash|rebase|merge)\b|\bpnpm\s+(add|install|remove)\b/
