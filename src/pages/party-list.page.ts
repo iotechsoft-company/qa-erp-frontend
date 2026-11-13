@@ -150,12 +150,14 @@ export abstract class PartyListPage extends BasePage {
 
   async expectSearchExisting() {
     const codes = await this.dataTable.readColumn(this.codeColumn)
-    if (!codes[0]) {
+    const code = codes.find((value) => !value.startsWith('E2E-'))
+    if (!code) {
+      await this.search.search('E2E-NO-SUCH-PARTY-!')
       await expect(this.table.getByText(this.emptyText, { exact: true })).toBeVisible()
       return
     }
-    await this.search.search(codes[0])
-    await expect(this.dataTable.row(codes[0])).toBeVisible()
+    await this.search.search(code)
+    await expect(this.dataTable.row(code)).toBeVisible()
   }
 
   async expectPagination() {

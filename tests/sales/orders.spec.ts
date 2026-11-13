@@ -1,5 +1,6 @@
 import { SalesScenario } from '@api/sales-scenario'
 import { expect, test } from '@fixtures/test'
+import { expectQuotationTypeBug } from '../helpers/sales-bugs'
 
 test.describe('Sales orders', { tag: ['@sales', '@regression', '@mutation'] }, () => {
   test('quotation ส่ง → อนุมัติ → แปลง SO → อ่าน → ยกเลิก ผ่าน UI', async ({
@@ -45,11 +46,10 @@ test.describe('Sales orders', { tag: ['@sales', '@regression', '@mutation'] }, (
   })
 
   test(
-    'โหมดสร้าง SO ส่ง quotation document_type ตรง DTO',
+    'known bug #3: โหมด SO ส่ง document_type ตัวพิมพ์เล็กและถูก reject',
     { annotation: { type: 'issue', description: 'https://github.com/iotechsoft-company/erp-frontend/issues/3' } },
-    async ({ allowMutation, api, salesCreatePage, page }) => {
+    async ({ allowMutation, api, salesCreatePage }) => {
       void allowMutation
-      test.fail(true, 'quotation document_type case mismatch')
       const scenario = new SalesScenario(api)
       try {
         await scenario.seed()
@@ -59,13 +59,7 @@ test.describe('Sales orders', { tag: ['@sales', '@regression', '@mutation'] }, (
         await salesCreatePage.addProduct(scenario.sku)
         await salesCreatePage.setLine(scenario.sku, 'ราคาขาย/หน่วย', '100')
         await salesCreatePage.remark.fill(scenario.quotationInput().remark_th)
-        const result = page.waitForResponse(
-          (res) => new URL(res.url()).pathname === '/api/sales-bc/v1/quotations' && res.request().method() === 'POST',
-        )
-        await salesCreatePage.save('order')
-        const response = await result
-        expect(response.request().postDataJSON().document_type).toBe('STANDARD_QUOTATION')
-        expect(response.status()).toBe(201)
+        await expectQuotationTypeBug(await salesCreatePage.submit('order'))
       } finally {
         await scenario.cleanup()
       }

@@ -54,7 +54,7 @@ test.describe('Sales factories ↔ API', { tag: ['@sales', '@api', '@regression'
         try {
           await scenario.seed()
           const order = await scenario.createOrder()
-          expect(['CONFIRMED', 'PENDING_APPROVAL']).toContain(order.status)
+          expect(order.status).toBe('CONFIRMED')
           const note = await api.create<{ status: string }>(
             '/sales-bc/v1/delivery-notes',
             scenario.deliveryInput(order),

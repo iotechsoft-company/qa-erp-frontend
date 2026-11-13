@@ -20,11 +20,21 @@ export class DataTable {
     return this.root.locator('tbody').getByRole('row').allTextContents()
   }
 
-  async readColumn(column: string) {
+  private async columnIndex(column: string) {
     await expect(this.root.getByRole('columnheader', { name: column, exact: true })).toBeVisible()
     const headers = await this.root.getByRole('columnheader').allTextContents()
     const index = headers.indexOf(column)
     if (index < 0) throw new Error(`Unknown column: ${column}`)
+    return { index, headers }
+  }
+
+  async cell(row: string | Locator, column: string) {
+    const { index } = await this.columnIndex(column)
+    return (typeof row === 'string' ? this.row(row) : row).getByRole('cell').nth(index)
+  }
+
+  async readColumn(column: string) {
+    const { index, headers } = await this.columnIndex(column)
     // Empty/loading rows use a single colspan cell rather than one cell per column.
     const rows = this.root
       .locator('tbody')

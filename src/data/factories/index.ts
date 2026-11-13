@@ -1,6 +1,7 @@
 import { faker } from '@faker-js/faker'
 
-import { E2E_PREFIX } from '@utils/test-data'
+import { e2eCode } from './ids'
+export { e2eCode } from './ids'
 
 import {
   thaiAddress,
@@ -21,11 +22,6 @@ import {
  *   → ค้นหาและ cleanup ได้ด้วย filter `code||$starts||E2E-`
  * ทุก factory รับ overrides เพื่อกำหนดค่าเฉพาะในเทส
  */
-
-const runId = () =>
-  `${Date.now().toString(36).toUpperCase()}${faker.string.alphanumeric({ length: 3, casing: 'upper' })}`
-
-export const e2eCode = (entity: string) => `${E2E_PREFIX}-${entity}-${runId()}`
 
 // ─── sales-bc: POST /sales-bc/v1/customers (CreateCustomerDTO) ───
 export type CustomerInput = {
@@ -147,9 +143,8 @@ export const buildProduct = (
   overrides: Partial<ProductInput> = {},
 ): ProductInput => {
   const p = thaiProduct()
-  const tag = runId()
   return {
-    sku: `${E2E_PREFIX}-${p.sku}-${tag}`,
+    sku: e2eCode(p.sku),
     name_th: p.th,
     name_en: p.en,
     type: 'single',

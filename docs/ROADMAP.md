@@ -119,3 +119,19 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 - `pnpm check-types && pnpm lint`: exit 0 with 0 errors / 0 warnings.
 - Final cleanup dry-run: 0 active Sales E2E records and 0 master-data E2E records. Cancelled audit rows retained: DN 9, SO 74, QT 75 (158 total); supported API operations do not delete these audits.
 - PR must be reviewed by Claude; no merge performed.
+
+## PR #2 review revision
+
+- Fixed smoke race: customer/supplier search excludes E2E codes; no stable visible code falls back to an unmatched search and empty-state assertion.
+- Replaced all eight broad Sales expected failures with issue-linked bug characterizations. They require the exact request mapping, HTTP status and error signature (or an existing DRAFT with details loaded and both edit/delete controls absent); unrelated locator/network/cleanup errors fail normally. A bug fix turns its characterization red and requires migration to the healthy flow.
+- createOrder now returns the approval response when approval was needed; API contracts require CONFIRMED only. Stock references require a warehouse ID on the same balance row.
+- Removed the 30-page findRecord cap; pagination goes to the real last page and reports the actual pages scanned. ERP list helpers expose only local page/search/status state, so adding a sort URL parameter would not affect UI requests; no request rewriting was added.
+- Added shared cleanup transition policy used by fixtures and cleanup script, with three read-only policy tests. Converted QT stays retained until SO cancellation clears its link; cleanup re-reads QT afterwards. Terminal/unsupported states are explicitly retained. Customer cleanup is attempted even if document cleanup fails, then failures are aggregated.
+- Restored ignored non-E2E row logging; Sales form now uses DataTable.cell for column lookup and a row scoped by exact rendered SKU text. Moved E2E IDs to leaf ids.ts, removing the circular barrel import; no generated SKU format change.
+- allowImportingTsExtensions supports the cleanup script’s native Node TypeScript import of the shared policy (noEmit remains enabled).
+- Review revision validation: `pnpm test --repeat-each=2 --retries=0 --reporter=list` exited 0, 183 executions: 175 ordinary passes (including the 16 Sales bug-characterization executions), 2 expected-failure executions for erp-api#13, and 6 fixme executions for #14/#15. No retries or unexpected failures.
+- `pnpm check-types && pnpm lint`: exit 0, 0 errors / 0 warnings. Final dry-run cleanup after removing one owned set left by an interrupted preliminary run: 0 active Sales and 0 master-data E2E records, 0 non-cancellable active remainders. Cancelled audits retained: DN 12, SO 89, QT 90 (191 total). No inventory stock was posted.
+
+### Follow-up after PR #2
+
+- [ ] Narrow serialized mutation execution to inventory tree writes in a separate PR; benchmark other mutation workers against the current baseline and backend concurrency issues #14/#15 before increasing parallelism. Deferred review comment: https://github.com/iotechsoft-company/qa-erp-frontend/pull/2#discussion_r4565831133

@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test'
 import { BasePage } from './base.page'
-import { MuiAutocomplete, MuiSelect } from './components'
+import { DataTable, MuiAutocomplete, MuiSelect } from './components'
 export type SalesMode = 'quotation' | 'order' | 'delivery'
 const modeLabels = {
   quotation: 'ใบเสนอราคา (Quotation)',
@@ -10,8 +10,10 @@ const modeLabels = {
 const saveLabels = { quotation: 'บันทึกใบเสนอราคา', order: 'บันทึกใบสั่งขาย', delivery: 'บันทึกใบส่งสินค้า' }
 export class SalesCreatePage extends BasePage {
   readonly path = '/sales'
+  readonly dataTable: DataTable
   constructor(page: Page) {
     super(page)
+    this.dataTable = new DataTable(page)
   }
   get productInput() {
     return this.page.getByPlaceholder('ยิงบาร์โค้ด หรือค้นหาชื่อสินค้า / SKU...', { exact: true })
@@ -29,7 +31,7 @@ export class SalesCreatePage extends BasePage {
     return this.page.getByRole('textbox', { name: 'หมายเหตุ', exact: true })
   }
   get table() {
-    return this.page.getByRole('table').first()
+    return this.dataTable.root
   }
   async selectMode(mode: SalesMode) {
     await new MuiSelect(this.page, this.page.getByRole('combobox', { name: 'ประเภทเอกสาร', exact: true })).choose(
@@ -45,20 +47,16 @@ export class SalesCreatePage extends BasePage {
       .getByRole('option')
       .filter({ has: this.page.getByText(sku, { exact: true }) })
       .click()
-    await expect(this.table.getByRole('row').filter({ hasText: sku })).toBeVisible()
+    await expect(this.itemRow(sku)).toBeVisible()
+  }
+  private itemRow(sku: string) {
+    return this.table.getByRole('row').filter({ has: this.page.getByText(`SKU: ${sku}`, { exact: true }) })
   }
   async setLine(sku: string, column: 'จำนวน' | 'ราคาขาย/หน่วย' | 'ส่วนลด', value: string) {
-    const headers = await this.table.getByRole('columnheader').allTextContents()
-    const index = headers.indexOf(column)
-    if (index < 0) throw new Error(`No sales item column: ${column}`)
-    await this.table
-      .getByRole('row')
-      .filter({ hasText: sku })
-      .getByRole('cell')
-      .nth(index)
-      .getByRole('textbox')
-      .fill(value)
+    const cell = await this.dataTable.cell(this.itemRow(sku), column)
+    await cell.getByRole('textbox').fill(value)
   }
+
   async selectWarehouse(name: string) {
     await new MuiSelect(this.page, this.page.getByRole('combobox', { name: 'คลังสินค้าต้นทาง' })).choose(name)
   }
@@ -68,15 +66,12 @@ export class SalesCreatePage extends BasePage {
   async save(mode: SalesMode) {
     await this.saveButton(mode).click()
   }
-  async submitQuotation() {
+  async submit(mode: SalesMode) {
+    const resource = mode === 'delivery' ? 'delivery-notes' : 'quotations'
     const result = this.page.waitForResponse(
-      (res) => new URL(res.url()).pathname === '/api/sales-bc/v1/quotations' && res.request().method() === 'POST',
+      (res) => new URL(res.url()).pathname === `/api/sales-bc/v1/${resource}` && res.request().method() === 'POST',
     )
-    await this.save('quotation')
-    const response = await result
-    expect(response.ok()).toBe(true)
-    const json = (await response.json()) as { data: { id: string; attributes: { quotation_number: string } } }
-    await expect(this.page.getByRole('dialog')).toBeVisible()
-    return { id: json.data.id, number: json.data.attributes.quotation_number }
+    await this.save(mode)
+    return result
   }
 }

@@ -1,4 +1,4 @@
-import { e2eCode } from './index'
+import { e2eCode } from './ids'
 
 export type QuotationInput = {
   customer_id: string

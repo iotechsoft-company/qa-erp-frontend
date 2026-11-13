@@ -51,7 +51,7 @@ export abstract class SalesDocumentListPage extends BasePage {
         .or(this.table.getByText(this.config.empty, { exact: true })),
     ).toBeVisible()
   }
-  async search(text: string) {
+  async searchResponse(text: string) {
     const result = this.page.waitForResponse((res) => {
       const url = new URL(res.url())
       return (
@@ -62,8 +62,8 @@ export abstract class SalesDocumentListPage extends BasePage {
     })
     await this.searchInput.fill(text)
     const response = await result
-    expect(response.ok()).toBe(true)
     await response.finished()
+    return response
   }
   pageStatusFilter() {
     return this.page.getByRole('combobox').filter({ hasText: this.selectedStatus })
@@ -81,26 +81,29 @@ export abstract class SalesDocumentListPage extends BasePage {
   }
   /** User-visible pagination fallback while the app's document search is broken. */
   async findRecord(number: string) {
-    for (let pageNumber = 1; pageNumber <= 30; pageNumber++) {
+    let pageNumber = 1
+    while (true) {
       const numbers = await this.dataTable.readColumn(this.config.numberColumn)
       if (numbers.includes(number)) {
         await expect(this.dataTable.row(number)).toBeVisible()
         return
       }
-      if (!(await this.dataTable.next.count()) || !(await this.dataTable.next.isEnabled())) break
+      if (!(await this.dataTable.next.count()) || !(await this.dataTable.next.isEnabled())) {
+        throw new Error(`Document ${number} not found after scanning ${pageNumber} UI page(s); reached last page`)
+      }
       const result = this.page.waitForResponse((res) => {
         const url = new URL(res.url())
         return url.pathname === this.endpoint && url.searchParams.get('page') === String(pageNumber + 1)
       })
       await this.dataTable.next.click()
       const response = await result
+      pageNumber += 1
       expect(response.ok()).toBe(true)
       const json = (await response.json()) as { data: { attributes: Record<string, string> }[] }
       await expect
         .poll(() => this.dataTable.readColumn(this.config.numberColumn))
         .toEqual(json.data.map((row) => row.attributes[this.config.numberField]))
     }
-    throw new Error(`Document ${number} not found within 30 UI pages`)
   }
 
   async openDetails(number: string) {

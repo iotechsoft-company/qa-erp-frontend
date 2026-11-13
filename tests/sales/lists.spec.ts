@@ -3,16 +3,28 @@ const lists = ['quotationsPage', 'salesOrdersPage', 'deliveryNotesPage'] as cons
 for (const key of lists) {
   test.describe(`${key}`, { tag: ['@sales', '@smoke'] }, () => {
     test(
-      'ค้นหาเลขเอกสารแสดงผลถูกต้อง',
+      'known bug #2: ค้นหาส่ง $contL และ API reject operator ตรงสาเหตุ',
       {
         annotation: { type: 'issue', description: 'https://github.com/iotechsoft-company/erp-frontend/issues/2' },
       },
       async ({ quotationsPage, salesOrdersPage, deliveryNotesPage }) => {
-        test.fail(true, 'erp-frontend#2 — unsupported $contL search operator')
         const list = { quotationsPage, salesOrdersPage, deliveryNotesPage }[key]
         await list.goto()
-        await list.search('E2E-NO-SUCH-DOCUMENT-!')
-        await expect(list.table.getByText(list.config.empty, { exact: true })).toBeVisible()
+        const search = 'E2E-NO-SUCH-DOCUMENT-!'
+        const response = await list.searchResponse(search)
+        const query = new URL(response.url()).searchParams.get('s')!
+        expect(JSON.parse(query)).toEqual({ [list.config.numberField]: { $contL: search } })
+        expect(response.status()).toBe(400)
+        expect(await response.json()).toMatchObject({
+          status: { code: 400002 },
+          errors: [
+            {
+              code: 'INVALID_PARAMETER_FORMAT',
+              detail: expect.stringContaining("Invalid search operator: '$contL'"),
+              source: { parameter: 's' },
+            },
+          ],
+        })
       },
     )
 

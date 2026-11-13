@@ -1,13 +1,13 @@
 import { SalesScenario } from '@api/sales-scenario'
 import { expect, test } from '@fixtures/test'
+import { expectQuotationTypeBug } from '../helpers/sales-bugs'
 
 test.describe('Quotations', { tag: ['@sales', '@regression', '@mutation'] }, () => {
   test(
-    'สร้างใบเสนอราคาผ่าน UI และอ่านรายละเอียดใน list',
+    'known bug #3: สร้าง QT ถูก reject เพราะ document_type ตัวพิมพ์เล็ก',
     { annotation: { type: 'issue', description: 'https://github.com/iotechsoft-company/erp-frontend/issues/3' } },
-    async ({ allowMutation, api, salesCreatePage, quotationsPage }) => {
+    async ({ allowMutation, api, salesCreatePage }) => {
       void allowMutation
-      test.fail(true, 'quotation document_type case mismatch')
       const scenario = new SalesScenario(api)
       try {
         await scenario.seed()
@@ -17,17 +17,7 @@ test.describe('Quotations', { tag: ['@sales', '@regression', '@mutation'] }, () 
         await salesCreatePage.addProduct(scenario.sku)
         await salesCreatePage.setLine(scenario.sku, 'ราคาขาย/หน่วย', '100')
         await salesCreatePage.remark.fill(scenario.quotationInput().remark_th)
-        const quote = await salesCreatePage.submitQuotation()
-        await quotationsPage.goto()
-        await quotationsPage.findRecord(quote.number)
-        await expect(quotationsPage.dataTable.row(quote.number)).toContainText('ฉบับร่าง')
-        await quotationsPage.openDetails(quote.number)
-        await expect(quotationsPage.details).toContainText(scenario.customer.name_th)
-        await quotationsPage.closeDetails()
-        const actual = await api.get<{ data: { attributes: { status: string } } }>(
-          `/sales-bc/v1/quotations/${quote.id}`,
-        )
-        expect(actual.data.attributes.status).toBe('DRAFT')
+        await expectQuotationTypeBug(await salesCreatePage.submit('quotation'))
       } finally {
         await scenario.cleanup()
       }
@@ -100,23 +90,28 @@ test.describe('Quotations', { tag: ['@sales', '@regression', '@mutation'] }, () 
   })
 
   test(
-    'ร่างใบเสนอราคามีปุ่มแก้ไขและลบ',
+    'known bug #5: QT draft ยังไม่มีปุ่มแก้ไขและลบ',
     { annotation: { type: 'issue', description: 'https://github.com/iotechsoft-company/erp-frontend/issues/5' } },
     async ({ allowMutation, api, quotationsPage }) => {
       void allowMutation
-      test.fail(true, 'erp-frontend#5 — draft edit/delete UI is missing')
       const scenario = new SalesScenario(api)
       try {
         await scenario.seed()
         const quote = await scenario.createQuotation()
         await quotationsPage.goto()
         await quotationsPage.findRecord(quote.quotation_number!)
+        await expect(quotationsPage.dataTable.row(quote.quotation_number!)).toContainText('ฉบับร่าง')
+        await quotationsPage.openDetails(quote.quotation_number!)
+        await expect(quotationsPage.details).toContainText(scenario.customer.name_th)
+        await expect(quotationsPage.details.getByRole('button', { name: 'แก้ไข', exact: true })).toHaveCount(0)
+        await expect(quotationsPage.details.getByRole('button', { name: 'ลบ', exact: true })).toHaveCount(0)
+        await quotationsPage.closeDetails()
         await expect(
           quotationsPage.dataTable.row(quote.quotation_number!).getByRole('button', { name: 'แก้ไข', exact: true }),
-        ).toBeVisible()
+        ).toHaveCount(0)
         await expect(
           quotationsPage.dataTable.row(quote.quotation_number!).getByRole('button', { name: 'ลบ', exact: true }),
-        ).toBeVisible()
+        ).toHaveCount(0)
       } finally {
         await scenario.cleanup()
       }

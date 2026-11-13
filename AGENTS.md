@@ -95,3 +95,7 @@ mark the spec with `test.fail()` + `annotation: { type: 'issue', description: <u
 - Sales draft PUT can intermittently return 404 after successful POST/GET of the same ID (7/20 measured serial contract runs). Update contracts are quarantined with an erp-api#14 issue annotation; do not retry writes to hide this unresolved behavior.
 
 - Concurrent item-group create/update can return HTTP 500 / PostgreSQL 40P01 deadlock (erp-api#15). Always await allSettled for concurrent mutations before cleanup so one failed request cannot race remaining writes; the intermittent repro remains quarantined.
+
+- Customer/supplier smoke searches choose the first non-E2E code. If none is visible, search an unmatched value and assert the empty state; never depend on a parallel mutation test’s record.
+- Sales regressions for frontend#2–#5 characterize the exact open bug (request payload + status/error or confirmed draft controls absent), retaining issue annotations. Do not use broad test.fail for these cases; replace characterization with healthy-flow assertions when fixed.
+- Sales cleanup follows backend transition guards: cancel linked SO before re-reading/cancelling QT; retain linked/expired QT and partial/closed/delivered SO. DN supports cancellation only from DRAFT/PENDING_APPROVAL/SUBMITTED (drafts are deleted). Always attempt owned customer cleanup and report aggregated failures.

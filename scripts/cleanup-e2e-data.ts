@@ -7,13 +7,14 @@
  * ไม่แตะ user e2e.admin / e2e.staff
  */
 import { existsSync, readFileSync } from 'node:fs'
+import { salesCleanupAction, type SalesCleanupRecord, type SalesResource } from '../src/data/sales-cleanup.ts'
 
 const APPLY = process.argv.includes('--apply')
 
-const TARGETS: { path: string; field: string; document?: boolean }[] = [
-  { path: '/sales-bc/v1/delivery-notes', field: 'remark_th', document: true },
-  { path: '/sales-bc/v1/sales-orders', field: 'remark_th', document: true },
-  { path: '/sales-bc/v1/quotations', field: 'remark_th', document: true },
+const TARGETS: { path: string; field: string; document?: SalesResource }[] = [
+  { path: '/sales-bc/v1/delivery-notes', field: 'remark_th', document: 'delivery-notes' },
+  { path: '/sales-bc/v1/sales-orders', field: 'remark_th', document: 'sales-orders' },
+  { path: '/sales-bc/v1/quotations', field: 'remark_th', document: 'quotations' },
   { path: '/sales-bc/v1/customers', field: 'code' },
   { path: '/supplier-bc/v1/suppliers', field: 'code' },
   { path: '/inventory-bc/v1/products', field: 'sku' },
@@ -49,6 +50,7 @@ let failures = 0
 
 for (const t of TARGETS) {
   const qs = new URLSearchParams({ filter: `${t.field}||$starts||E2E-`, ignore_limit: 'true' })
+  if (t.document === 'sales-orders') qs.set('relations', 'items')
   const res = await fetch(`${BASE}/api${t.path}?${qs}`, { headers })
   if (!res.ok) {
     failures += 1
@@ -69,17 +71,25 @@ for (const t of TARGETS) {
   const mine = rows
     .filter((r) => ownedKey(r).startsWith('E2E-'))
     .sort((a, b) => Number(b.attributes.type === 'bundle') - Number(a.attributes.type === 'bundle'))
-  const retained = t.document ? mine.filter((r) => r.attributes.status === 'CANCELLED') : []
-  const active = mine.filter((r) => !retained.includes(r))
+  const actionFor = (row: (typeof mine)[number]) =>
+    t.document ? salesCleanupAction(t.document, row.attributes as SalesCleanupRecord) : 'delete'
+  const retained = mine.filter((r) => actionFor(r) === 'retain')
+  const active = mine.filter((r) => actionFor(r) !== 'retain')
+  const cancelled = retained.filter((r) => r.attributes.status === 'CANCELLED').length
+  const terminal = retained.filter((r) => r.attributes.status !== 'CANCELLED')
   console.log(
-    `${t.path}: ${active.length} ${t.document ? 'active ' : ''}E2E record(s)${t.document ? `; ${retained.length} cancelled audit record(s) retained` : ''}`,
+    `${t.path}: ${active.length} ${t.document ? 'active ' : ''}E2E record(s)${t.document ? `; ${cancelled} cancelled audit record(s) retained; ${terminal.length} non-cancellable record(s) retained` : ''}${rows.length > mine.length ? ` (ignored ${rows.length - mine.length} non-E2E)` : ''}`,
   )
+  for (const r of terminal)
+    console.log(
+      `  retained: ${ownedKey(r)} (${String(r.attributes.status)}, linked SO: ${Boolean(r.attributes.sales_order_id)})`,
+    )
   for (const r of active) {
     if (!APPLY) {
       console.log(`  - ${ownedKey(r)} (${r.id})`)
       continue
     }
-    const cancel = t.document && (t.path.endsWith('/sales-orders') || r.attributes.status !== 'DRAFT')
+    const cancel = actionFor(r) === 'cancel'
     const del = await fetch(`${BASE}/api${t.path}/${r.id}${cancel ? '/cancel' : ''}`, {
       method: cancel ? 'POST' : 'DELETE',
       headers: { ...headers, ...(cancel ? { 'Content-Type': 'application/json' } : {}) },
