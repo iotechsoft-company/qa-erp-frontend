@@ -18,7 +18,7 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 - [x] Shared components POM: data table (rows/columns, sort API, pagination), search box, inline filter, confirm dialog, snackbar/alert, MUI select/autocomplete. Inventory uses inline filters; no filter drawer is rendered.
 - [x] inventory: products, item-groups, product-groups — list + create/edit forms, read-only search/pagination, UI CRUD and Thai required-field validation. Sort UI remains unavailable (see Phase 2 verification).
 - [ ] customer: customers · supplier: purchasers — implemented, awaiting PR review/merge: list/search/pagination, create/edit POMs, company + individual UI CRUD, delete cancellation, Thai required/length and module-specific validation.
-- [ ] sales: quotations, orders, delivery-notes, create
+- [ ] sales: quotations, orders, delivery-notes, create — POMs, draft API create/read/delete (update quarantined), list/filter/pagination, UI QT→SO lifecycle and DN read/cancel validation implemented; full UI CRUD blocked by erp-frontend#2–#5 (see Sales verification).
 - [ ] purchasing: orders, goods-receipts, create
 - [ ] reports: sales, purchases (filters + export)
 - [ ] settings: shop, sales, item-groups
@@ -48,7 +48,13 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 <!-- filed via .claude/skills/report-bug — format: - repo#n — title -->
 
 - [erp-api#13](https://github.com/iotechsoft-company/erp-api/issues/13) — POST item-groups rejects omitted optional parent; factory sends explicit null, separate contract test uses test.fail + issue annotation.
+- [erp-api#14](https://github.com/iotechsoft-company/erp-api/issues/14) — read-after-write 404 under concurrent load; two Sales update regressions remain fixme.
 - [erp-api#15](https://github.com/iotechsoft-company/erp-api/issues/15) — concurrent item-group writes return 500/40P01 deadlock; repro retained as fixme because the failure is intermittent (2/3 initially; 1/10 after awaiting all writes before cleanup).
+
+- [erp-frontend#2](https://github.com/iotechsoft-company/erp-frontend/issues/2) — QT/SO/DN searches send unsupported `$contL` JSON search operator (400).
+- [erp-frontend#3](https://github.com/iotechsoft-company/erp-frontend/issues/3) — QT/SO creation sends lowercase quotation document_type (400).
+- [erp-frontend#4](https://github.com/iotechsoft-company/erp-frontend/issues/4) — DN form sends customer/product IDs instead of SO/SO-item IDs.
+- [erp-frontend#5](https://github.com/iotechsoft-company/erp-frontend/issues/5) — QT/DN draft edit/delete UI is absent although their API supports draft CRUD.
 
 ## Phase 2 verification (2026-11-13)
 
@@ -81,3 +87,35 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 - `pnpm check-types && pnpm lint`: passed with 0 errors / 0 warnings.
 - No new app bugs were confirmed in customers/purchasers; no additional GitHub issues were filed.
 - `pnpm cleanup:e2e` (dry-run): exit 0; 0 E2E records in customers, suppliers, products, item-groups and uoms.
+
+## Sales verification (2026-11-13)
+
+- New files: `src/pages/{sales-document-list,sales-create,quotations,sales-orders,delivery-notes}.page.ts`; `src/api/sales-scenario.ts`; `src/data/factories/sales.ts`; `tests/sales/{lists,quotations,orders,delivery-notes}.spec.ts`; `tests/api/sales-factories.spec.ts`.
+- Updated integration files: `src/fixtures/test.ts`, `src/pages/index.ts`, `src/pages/components/index.ts`, `src/data/factories/index.ts`, `scripts/cleanup-e2e-data.ts`, `AGENTS.md`, and this roadmap.
+
+- Added list POMs for `/sales/quotations`, `/sales/orders`, `/sales/delivery-notes`, and shared `/sales` create-form POM; page fixtures and exports are registered.
+- Added CreateQuotationDTO/CreateDeliveryNoteDTO factories and 4 API contracts (2 active create/read/delete, 2 quarantined update regressions). Document numbers are server-generated; ownership uses a unique `E2E-` prefix in `remark_th` (response `remark.th`). No unsupported code/number fields are sent.
+- SalesScenario seeds an owned customer with a realistic company and sufficient credit. It looks up an existing stock-bearing catalogue product/warehouse as immutable references (`product_sku`, `total_qty - expired_qty` in stock-balances); tests do not post inventory movements.
+- SO has no direct POST/PUT/DELETE. It is created by converting an APPROVED quotation, and cleanup uses cancellation. API setup sends/approves a quotation before conversion, then reads its actual SO item IDs for DN creation.
+- UI coverage includes list/filter/pagination; quotation customer/date/expiry validation; QT send→approve→convert→SO details/cancel; DN details, blank/whitespace cancel-reason validation, and cancellation. Known UI defects have isolated expected-failure regressions with issue annotations; source ERP files remain read-only.
+- Search is broken in the app, so unblocked lifecycle specs find their owned document using normal UI pagination. Requests are never intercepted or rewritten. After state changes, re-open the list and find the document again because backend ordering may move it to another page.
+- UI QT/DN edit/delete and UI QT/SO/DN creation remain blocked by the reported app defects; this roadmap item deliberately remains unchecked. SO edit/delete is unavailable by API design, not a failed locator.
+- Cleanup order: DN → SO → QT → customer. Draft QT/DN can be deleted; non-drafts and SO are cancelled. Cancelled sales documents are retained audit records and cannot satisfy a literal “zero records” condition via supported APIs. The cleanup tool explicitly reports active E2E records separately from retained cancelled audit records; it does not hide or relabel them.
+- New TARGETS cover delivery-notes, sales-orders, quotations by remark_th, ahead of referenced master data. Failed cleanup remains a nonzero exit code.
+- Draft PUT investigation: 7/20 serial API contract runs failed with 404 after POST 201 and GET of the exact same DRAFT ID. No write retries were added. Two update cases are isolated with `test.fixme` + `flaky` annotation under flaky-hunter; create/read/delete contracts remain active. Claude independently reproduced the backend inconsistency and filed erp-api#14; both update cases now carry its issue annotation.
+- Added 24 Sales cases: 20 UI cases and 4 API contracts. Of these, 8 UI cases have issue-linked expected failures and 2 API update cases are quarantined; 14 are ordinary active checks.
+- DN validation initially used the default warehouse instead of the stock-bearing fixture warehouse. Selecting the fixture warehouse before adding the product fixed the setup; focused validation passed 3/3 repeats.
+- `pnpm check-types && pnpm lint`: passed, 0 errors / 0 warnings; Prettier and `git diff --check` passed.
+- Final `pnpm test --reporter=list`: exit 0, 88 executions — 77 ordinary passes, 9 expected failures (8 Sales plus existing erp-api#13), 2 quarantined/skipped update cases; no retries. This is not a claim that all CRUD functionality passes.
+- Final `pnpm exec playwright test tests/sales tests/api/sales-factories.spec.ts --repeat-each=2 --retries=0 --reporter=list`: exit 0, 49 executions — 29 ordinary passes, 16 issue-linked expected failures, 4 quarantined/skipped update executions. No unexpected failures or retries; quarantined PUT is not claimed stable.
+- Final `pnpm cleanup:e2e` dry-run: exit 0; 0 active Sales E2E records and 0 records in all master-data targets. Retained cancelled audits: 7 DN, 64 SO, 65 QT (136 total). Literal zero total Sales records is not achieved because the API retains cancelled audit documents.
+
+## Review handoff (combined pending work)
+
+- Branch `codex/inventory-customers-sales` gathers existing uncommitted Inventory/customers/Sales work as explicitly requested; future work uses one PR per module.
+- Reviewer-reported product factory and single/bundle UI CRUD all passed 3/3 focused repeats. Explicit null parent in factories and serialized mutation projects prevent the prior setup/tree-write collisions; the optional omitted-parent case remains issue-linked expected failure (#13).
+- Restored the concurrent item-group repro instead of deleting it. POST returns a real 500/40P01 deadlock intermittently; waiting for all concurrent writes before cleanup fixes early cleanup but does not fix the backend deadlock. Retained as issue-linked fixme (#15), avoiding random unexpected passes with unconditional test.fail.
+- Final combined verification: `pnpm test --repeat-each=2 --retries=0 --reporter=list` exited 0, 177 executions: 153 ordinary passes, 18 expected-failure executions (#13 and frontend #2–#5), 6 fixme executions (race #15 and two update cases #14 repeated twice). No retries or unexpected failures.
+- `pnpm check-types && pnpm lint`: exit 0 with 0 errors / 0 warnings.
+- Final cleanup dry-run: 0 active Sales E2E records and 0 master-data E2E records. Cancelled audit rows retained: DN 9, SO 74, QT 75 (158 total); supported API operations do not delete these audits.
+- PR must be reviewed by Claude; no merge performed.
