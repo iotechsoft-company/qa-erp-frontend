@@ -50,3 +50,4 @@ Thumbs.db
 .claude/settings.local.json
 .codex/*
 !.codex/config.toml
+!.codex/hooks.json

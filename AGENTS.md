@@ -41,6 +41,7 @@ Playwright Test + TypeScript · pnpm · zod (env validation) · @faker-js/faker 
 Skills: source of truth is `.claude/skills/<name>/SKILL.md`; `.agents/skills/<name>` are symlinks so Codex discovers the same files.
 Invoke: Claude Code `/triage-failure` · Codex `$triage-failure` (both also auto-trigger from the description).
 Playwright MCP: Claude Code reads `.mcp.json`, Codex reads `.codex/config.toml` (project must be **trusted** in Codex) — keep them in sync.
+Hooks (`scripts/hooks/`, both agents) block risky git/secret/ERP-source actions and enforce tsc+eslint on files you edit before you finish — if a hook blocks you, follow its message; don't work around it.
 New skill → create it under `.claude/skills/<name>/`, then `ln -s ../../.claude/skills/<name> .agents/skills/<name>`.
 
 | Need | Use |

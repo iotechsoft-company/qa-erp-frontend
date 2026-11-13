@@ -1,0 +1,54 @@
+{
+  "description": "qa-erp-frontend guards and checks — same scripts as .claude/settings.json (scripts/hooks/*.mjs)",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/scripts/hooks/session-start.mjs\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/scripts/hooks/pre-tool-use.mjs\"",
+            "timeout": 10,
+            "statusMessage": "qa: guard"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/scripts/hooks/post-tool-use.mjs\"",
+            "timeout": 60,
+            "statusMessage": "qa: prettier + eslint"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/scripts/hooks/stop.mjs\"",
+            "timeout": 180,
+            "statusMessage": "qa: tsc + eslint on edited files"
+          }
+        ]
+      }
+    ]
+  }
+}

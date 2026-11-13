@@ -70,6 +70,7 @@ skill from its `description`.
 .agents/skills/<name> → symlink    ← Codex reads here
 .mcp.json                          ← Playwright MCP for Claude Code
 .codex/config.toml                 ← Playwright MCP for Codex (keep in sync with .mcp.json)
+.claude/settings.json + .codex/hooks.json ← hooks → scripts/hooks/*.mjs
 ```
 
 ### Creating a new skill
@@ -102,6 +103,35 @@ skill from its `description`.
    ```
 4. Add a row to the skills table above and in `AGENTS.md` → "QA tooling".
 5. Restart / open a new session in both agents, check it is listed (`/` in Claude Code, `$` in Codex), commit.
+
+### Hooks (Claude Code & Codex)
+
+Same scripts for both agents: `scripts/hooks/*.mjs`, wired in `.claude/settings.json` (Claude) and
+`.codex/hooks.json` (Codex).
+
+| Event        | Script              | Does                                                                                                                                                                                                                                      |
+| ------------ | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SessionStart | `session-start.mjs` | Tells the agent about uncommitted paths (maybe the other agent's), branch sync, `.auth` age, last test run                                                                                                                                |
+| PreToolUse   | `pre-tool-use.mjs`  | **Blocks** `git add -A/.`, `commit -a`, force-push, `reset --hard`, `clean -f`, `stash`, whole-tree restore; edits to `.env`/`.auth/`; any write into `erp-frontend`; content containing `.env` passwords, JWTs or `QA_FORBIDDEN_STRINGS` |
+| PostToolUse  | `post-tool-use.mjs` | Prettier + ESLint on the edited TS/JS files; lint errors go back to the model                                                                                                                                                             |
+| Stop         | `stop.mjs`          | Won't let the agent finish while files **it** edited have `tsc`/ESLint errors (one retry, then warns). `QA_STOP_RUN_SPECS=1` also runs edited specs                                                                                       |
+
+Setup:
+
+- **Claude Code**: active automatically (project settings). Review with `/hooks`.
+- **Codex**: the project must be **trusted**, then review/trust the hooks (`/hooks` in the CLI; in the app via
+  its hooks/trust prompt). Every change to `.codex/hooks.json` must be trusted again.
+- Put the API domain in your local `.env` as `QA_FORBIDDEN_STRINGS=<domain>` so the guard can catch it.
+
+Test a hook by piping a payload:
+
+```bash
+echo '{"tool_name":"Bash","tool_input":{"command":"git add -A"}}' | node scripts/hooks/pre-tool-use.mjs
+```
+
+Turn off temporarily: Claude `"disableAllHooks": true` in `.claude/settings.local.json`; Codex
+`[features] hooks = false` in `~/.codex/config.toml`. Humans running commands in a terminal are never affected.
+Text inside heredocs (`<<EOF`) is ignored by the Bash guard, so docs/commit messages can mention blocked commands.
 
 ### Troubleshooting: Codex doesn't see a skill
 

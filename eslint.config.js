@@ -12,6 +12,13 @@ export default tseslint.config(
     },
   },
   {
+    // Node scripts (hooks are plain .mjs, so no-undef applies)
+    files: ['scripts/**/*.{mjs,js}', '*.config.{js,mjs}', 'eslint.config.js'],
+    languageOptions: {
+      globals: { process: 'readonly', console: 'readonly', Buffer: 'readonly', URL: 'readonly' },
+    },
+  },
+  {
     files: ['tests/**/*.ts'],
     ...playwright.configs['flat/recommended'],
     rules: {
