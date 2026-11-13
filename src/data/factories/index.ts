@@ -168,6 +168,7 @@ export const buildItemGroup = (overrides: Partial<ItemGroupInput> = {}): ItemGro
   name_th: `${e2eCode('IG')} เครื่องเขียนสำนักงาน`,
   name_en: 'Office stationery',
   is_group: false,
+  parent_item_group_id: null,
   ...overrides,
 })
 

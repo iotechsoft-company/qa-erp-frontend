@@ -51,7 +51,7 @@ test.describe('Data factories ↔ API contract', { tag: ['@regression', '@mutati
     })
   }
 
-  test('product', async ({ api }) => {
+  test('product', { tag: '@inventory' }, async ({ api }) => {
     const input = buildProduct({
       // product ผูกได้เฉพาะ leaf item group (is_group=false)
       item_group_id: await api.firstId('/inventory-bc/v1/item-groups', { filter: 'is_group||$eq||false' }),

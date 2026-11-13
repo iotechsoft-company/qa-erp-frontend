@@ -34,6 +34,18 @@ export default defineConfig({
     // 2) เทสที่ต้อง login แล้ว — reuse storageState
     {
       name: 'chromium',
+      grepInvert: /@mutation/,
+      use: { ...devices['Desktop Chrome'], storageState: STORAGE_STATE },
+      dependencies: ['setup'],
+      testIgnore: [/setup\//, /auth\//],
+    },
+
+    // Item-group writes rebuild the shared tree. Keep mutations isolated from each other;
+    // individual tests still seed and clean their own records and have no ordering dependency.
+    {
+      name: 'chromium-mutation',
+      workers: 1,
+      grep: /@mutation/,
       use: { ...devices['Desktop Chrome'], storageState: STORAGE_STATE },
       dependencies: ['setup'],
       testIgnore: [/setup\//, /auth\//],

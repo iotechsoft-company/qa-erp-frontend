@@ -47,10 +47,13 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 
 <!-- filed via .claude/skills/report-bug — format: - repo#n — title -->
 
+- [erp-api#13](https://github.com/iotechsoft-company/erp-api/issues/13) — POST item-groups rejects omitted optional parent; factory sends explicit null, separate contract test uses test.fail + issue annotation.
+- [erp-api#15](https://github.com/iotechsoft-company/erp-api/issues/15) — concurrent item-group writes return 500/40P01 deadlock; repro retained as fixme because the failure is intermittent (2/3 initially; 1/10 after awaiting all writes before cleanup).
+
 ## Phase 2 verification (2026-11-13)
 
 - Inventory: 12 tests (6 read-only smoke, 3 validation, 3 UI CRUD); replaces the products `test.fixme`.
-- Added item-group and UOM DTO factories + 2 API contract tests. Brands are not required by the forms, so no brand factory was added.
+- Added item-group and UOM DTO factories + 2 API contract tests, plus the issue-linked optional-parent regression. Brands are not required by the forms, so no brand factory was added.
 - UI tests create their own leaf item group and bundle component. The stock UOM is an existing read-only reference from the same first-100 window loaded by the UI; newly created UOMs can fall outside that window. API factory contracts still create/delete their own UOM.
 - Smoke searches cover an existing record (when present) and an unmatched value. Pagination checks page 2 and its API-returned identity column when enough records exist, otherwise assert disabled/empty state without writes.
 - Sort remains unimplemented in these three app pages: column definitions never set `sortable`, and the table is not passed `onSort`. Shared `DataTable.sort()` is ready for sortable tables; current specs verify the actual absence of sort controls. App source was read only.
@@ -58,4 +61,8 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 - Search completion waits for the submitted list request, preventing edit/delete from racing a previous query whose target row was already visible. Valid-form saves wait for POST/PUT success and form closure.
 - Valid CRUD waits for the mutation-triggered list response and for the rendered name column to match that response after the MUI modal closes. Empty colspan rows are excluded.
 - Cleanup deletes bundles before component singles and groups, and fails if any target query/delete fails.
-- Final verification results are recorded below after the full suite and cleanup complete.
+- Mutation tests run in a dedicated Chromium project with one worker because item-group writes rebuild the shared tree; read-only tests remain parallel. Tests still seed and clean their own records.
+- `pnpm check-types && pnpm lint`: passed, 0 errors / 0 warnings.
+- `pnpm test --reporter=list`: exit 0; 46 executions counted as passed by the runner (45 ordinary passes, 1 expected failure for erp-api#13), no retries/skips/fixmes.
+- `pnpm exec playwright test --repeat-each=2 tests/inventory --reporter=list`: 25 passed (12 inventory tests × 2 + auth setup), no retries or failures.
+- `pnpm cleanup:e2e` (dry-run): exit 0; 0 E2E records in customers, suppliers, products, item-groups and uoms.
