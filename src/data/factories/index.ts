@@ -156,3 +156,25 @@ export const buildProduct = (
     ...overrides,
   }
 }
+
+// These DTOs have no code field; prefix name_th so cleanup can identify ownership.
+export type ItemGroupInput = {
+  name_th: string
+  name_en?: string
+  is_group: boolean
+  parent_item_group_id?: string | null
+}
+export const buildItemGroup = (overrides: Partial<ItemGroupInput> = {}): ItemGroupInput => ({
+  name_th: `${e2eCode('IG')} เครื่องเขียนสำนักงาน`,
+  name_en: 'Office stationery',
+  is_group: false,
+  ...overrides,
+})
+
+export type UomInput = { name_th: string; name_en?: string; is_whole_number: boolean }
+export const buildUom = (overrides: Partial<UomInput> = {}): UomInput => ({
+  name_th: `${e2eCode('UOM')} ชิ้น`,
+  name_en: 'Piece',
+  is_whole_number: true,
+  ...overrides,
+})

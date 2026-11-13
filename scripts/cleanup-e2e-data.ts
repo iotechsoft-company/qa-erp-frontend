@@ -14,6 +14,8 @@ const TARGETS = [
   { path: '/sales-bc/v1/customers', field: 'code' },
   { path: '/supplier-bc/v1/suppliers', field: 'code' },
   { path: '/inventory-bc/v1/products', field: 'sku' },
+  { path: '/inventory-bc/v1/item-groups', field: 'name_th' },
+  { path: '/inventory-bc/v1/uoms', field: 'name_th' },
 ]
 
 const env: Record<string, string> = existsSync('.env')
@@ -40,26 +42,41 @@ const headers = {
   ...(attrs.csrf_token ? { 'x-csrf-token': attrs.csrf_token } : {}),
 }
 
+let failures = 0
+
 for (const t of TARGETS) {
   const qs = new URLSearchParams({ filter: `${t.field}||$starts||E2E-`, ignore_limit: 'true' })
   const res = await fetch(`${BASE}/api${t.path}?${qs}`, { headers })
   if (!res.ok) {
-    console.warn(`✗ ${t.path}: ${res.status} ${await res.text()}`)
+    failures += 1
+    console.warn(`✗ ${t.path}: ${res.status}`)
     continue
   }
   const rows: { id: string; attributes: Record<string, unknown> }[] = (await res.json()).data ?? []
   // กันพลาด: filter ซ้ำฝั่ง client เผื่อ backend ไม่รองรับ $starts แล้วคืนทั้งหมด
-  const mine = rows.filter((r) => String(r.attributes[t.field] ?? '').startsWith('E2E-'))
+  const ownedKey = (r: (typeof rows)[number]) =>
+    String(
+      t.field === 'name_th'
+        ? ((r.attributes.name as { th?: string } | undefined)?.th ?? r.attributes.name_th ?? '')
+        : (r.attributes[t.field] ?? ''),
+    )
+  // Bundles must be removed before component products or the API returns 409.
+  const mine = rows
+    .filter((r) => ownedKey(r).startsWith('E2E-'))
+    .sort((a, b) => Number(b.attributes.type === 'bundle') - Number(a.attributes.type === 'bundle'))
   console.log(
     `${t.path}: ${mine.length} E2E record(s)${rows.length !== mine.length ? ` (ignored ${rows.length - mine.length} non-E2E)` : ''}`,
   )
   for (const r of mine) {
     if (!APPLY) {
-      console.log(`  - ${r.attributes[t.field]} (${r.id})`)
+      console.log(`  - ${ownedKey(r)} (${r.id})`)
       continue
     }
     const del = await fetch(`${BASE}/api${t.path}/${r.id}`, { method: 'DELETE', headers })
-    console.log(`  ${del.ok ? '✓ deleted' : `✗ ${del.status}`} ${r.attributes[t.field]}`)
+    if (!del.ok) failures += 1
+    console.log(`  ${del.ok ? '✓ deleted' : `✗ ${del.status}`} ${ownedKey(r)}`)
   }
 }
 if (!APPLY) console.log('\n(dry-run — add --apply to delete)')
+
+if (failures) process.exitCode = 1

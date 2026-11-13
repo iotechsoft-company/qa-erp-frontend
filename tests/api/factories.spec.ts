@@ -1,4 +1,4 @@
-import { buildCustomer, buildProduct, buildSupplier } from '@data/factories'
+import { buildCustomer, buildItemGroup, buildProduct, buildSupplier, buildUom } from '@data/factories'
 import { isValidThaiTaxId } from '@data/factories/thai'
 import { expect, test } from '@fixtures/test'
 
@@ -30,6 +30,26 @@ test.describe('Data factories ↔ API contract', { tag: ['@regression', '@mutati
       await api.delete(`/supplier-bc/v1/suppliers/${created.id}`)
     }
   })
+
+  for (const [resource, factory] of [
+    ['item-groups', buildItemGroup],
+    ['uoms', buildUom],
+  ] as const) {
+    test(resource, { tag: '@inventory' }, async ({ api }) => {
+      const input = factory()
+      const path = `/inventory-bc/v1/${resource}`
+      const created = await api.create<{ name: { th: string } }>(path, input)
+      try {
+        expect(created.name.th).toBe(input.name_th)
+        await expect(async () => {
+          const fetched = await api.get<{ data: { attributes: { name: { th: string } } } }>(`${path}/${created.id}`)
+          expect(fetched.data.attributes.name.th).toBe(input.name_th)
+        }).toPass({ timeout: 10_000 })
+      } finally {
+        await api.delete(`${path}/${created.id}`)
+      }
+    })
+  }
 
   test('product', async ({ api }) => {
     const input = buildProduct({

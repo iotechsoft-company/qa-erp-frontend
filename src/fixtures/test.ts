@@ -2,11 +2,13 @@ import { test as base, expect } from '@playwright/test'
 
 import { ApiClient } from '@api/api-client'
 import { env, requireCredentials } from '@config/env'
-import { DashboardPage, LoginPage, ProductsPage } from '@pages/index'
+import { DashboardPage, ItemGroupsPage, LoginPage, ProductGroupsPage, ProductsPage } from '@pages/index'
 
 type Pages = {
   loginPage: LoginPage
   dashboardPage: DashboardPage
+  itemGroupsPage: ItemGroupsPage
+  productGroupsPage: ProductGroupsPage
   productsPage: ProductsPage
 }
 
@@ -20,6 +22,8 @@ type Helpers = {
 export const test = base.extend<Pages & Helpers>({
   loginPage: async ({ page }, use) => use(new LoginPage(page)),
   dashboardPage: async ({ page }, use) => use(new DashboardPage(page)),
+  itemGroupsPage: async ({ page }, use) => use(new ItemGroupsPage(page)),
+  productGroupsPage: async ({ page }, use) => use(new ProductGroupsPage(page)),
   productsPage: async ({ page }, use) => use(new ProductsPage(page)),
 
   // ใช้ request context แยก (ไม่แชร์ cookie กับ browser) เพื่อเป็น pure Bearer client
