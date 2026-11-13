@@ -10,8 +10,14 @@ on:
     - cron: '0 1 * * 1-5' # 08:00 Asia/Bangkok, จ.–ศ.
   pull_request:
 
+# Public repo: least-privilege token for every job.
+permissions:
+  contents: read
+
 jobs:
   e2e:
+    # Fork PRs get no secrets and must not touch the dev environment.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: dev
@@ -20,7 +26,11 @@ jobs:
       TEST_ENV: ${{ vars.TEST_ENV }}
       E2E_USERNAME: ${{ secrets.E2E_USERNAME }}
       E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+      E2E_STAFF_USERNAME: ${{ secrets.E2E_STAFF_USERNAME }}
+      E2E_STAFF_PASSWORD: ${{ secrets.E2E_STAFF_PASSWORD }}
       ALLOW_MUTATION: ${{ vars.ALLOW_MUTATION || 'false' }}
+      # passed via env, never interpolated into the script (prevents injection through the input)
+      GREP: ${{ inputs.grep || '@smoke' }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -32,7 +42,7 @@ jobs:
       - run: pnpm check-types
       - run: pnpm lint
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm exec playwright test --grep "${{ inputs.grep || '@smoke' }}"
+      - run: pnpm exec playwright test --grep "$GREP"
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:

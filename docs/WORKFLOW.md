@@ -54,3 +54,16 @@ cd ../qa-erp-claude && pnpm install && pnpm auth
 - Commit or push to `main` directly, force-push, `git add -A`, `git stash`, `git reset --hard` (hooks block these).
 - Edit files that belong to the other agent's open branch/PR — comment on the PR instead.
 - Leave work uncommitted at the end of a session — commit to your branch (WIP commits are fine).
+
+## This repo is PUBLIC
+
+Branch protection on `main` (PR required, `e2e` check must pass, no force-push, linear history) needs a public
+repo on the org's plan, so everything here is world-readable:
+
+- Code, PRs, issues, comments, **CI logs and artifacts** (any GitHub user can download artifacts).
+- CI therefore records **no Playwright traces** (they contain cookies, tokens and typed passwords) — only
+  screenshots/videos of failures. Reproduce locally (`pnpm exec playwright test --trace=on`) to get a trace.
+- Never paste tokens, passwords, cookies, `.env` values, the API domain, or raw API responses containing
+  personal data into PR/issue text. App bugs go to the **private** `erp-api` / `erp-frontend` repos via
+  `report-bug`, not to this repo's issues.
+- Fork PRs don't run E2E (no secrets, no dev access).
