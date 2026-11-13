@@ -47,7 +47,7 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 
 <!-- filed via .claude/skills/report-bug — format: - repo#n — title -->
 
-- [erp-api#13](https://github.com/iotechsoft-company/erp-api/issues/13) — POST item-groups rejects omitted optional parent; factory sends explicit null, separate contract test uses test.fail + issue annotation.
+- [erp-api#13](https://github.com/iotechsoft-company/erp-api/issues/13) — POST item-groups rejects omitted optional parent; factory sends explicit null; separate issue-annotated contract characterizes the exact 400/400000 leaf-parent rejection.
 - [erp-api#14](https://github.com/iotechsoft-company/erp-api/issues/14) — read-after-write 404 under concurrent load; two Sales update regressions remain fixme.
 - [erp-api#15](https://github.com/iotechsoft-company/erp-api/issues/15) — concurrent item-group writes return 500/40P01 deadlock; repro retained as fixme because the failure is intermittent (2/3 initially; 1/10 after awaiting all writes before cleanup).
 
@@ -135,3 +135,10 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 ### Follow-up after PR #2
 
 - [ ] Narrow serialized mutation execution to inventory tree writes in a separate PR; benchmark other mutation workers against the current baseline and backend concurrency issues #14/#15 before increasing parallelism. Deferred review comment: https://github.com/iotechsoft-company/qa-erp-frontend/pull/2#discussion_r4565831133
+
+## PR #2 re-review follow-up
+
+- Reviewer marked 165566a ready to merge; retained worker serialization as an agreed follow-up.
+- Addressed the additional non-blocking suggestion in this PR: item-group optional-parent case now asserts HTTP 400, status code 400000 and the exact leaf-parent message, keeping issue #13 annotation and API cleanup. No broad test.fail remains for this case. A fixed backend, different error, auth failure, network failure or cleanup failure fails normally.
+- ApiClient.postResponse exposes the authenticated/CSRF-protected raw response for error contracts; normal post/create use the same request path and still throw on non-2xx.
+- Follow-up validation: `pnpm check-types && pnpm lint` passed with 0 errors / 0 warnings; `pnpm exec playwright test tests/api/item-groups.spec.ts tests/api/factories.spec.ts --repeat-each=2 --retries=0 --reporter=list` passed 13 executions (including setup), no expected failures/retries/skips. Final cleanup dry-run: 0 active Sales and 0 master-data E2E records; cancelled audits remain DN 12, SO 89, QT 90. No merge performed.

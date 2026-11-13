@@ -8,17 +8,22 @@ test.describe(
   { tag: ['@regression', '@mutation', '@api', '@inventory'] },
   () => {
     test(
-      'root group accepts an omitted optional parent',
+      'known bug #13: omitted optional parent is rejected as a leaf parent',
       {
         annotation: { type: 'issue', description: 'https://github.com/iotechsoft-company/erp-api/issues/13' },
       },
       async ({ allowMutation, api }) => {
         void allowMutation
-        test.fail(true, 'erp-api#13 — undefined parent is incorrectly validated as an actual parent')
         const { parent_item_group_id: _parent, ...input } = buildItemGroup()
         try {
-          const created = await api.create<{ name: { th: string } }>('/inventory-bc/v1/item-groups', input)
-          expect(created.name.th).toBe(input.name_th)
+          const response = await api.postResponse('/inventory-bc/v1/item-groups', input)
+          expect(response.status()).toBe(400)
+          expect(await response.json()).toMatchObject({
+            status: {
+              code: 400000,
+              message: 'Cannot attach a child item group to a leaf (is_group=false) parent.',
+            },
+          })
         } finally {
           await cleanupOwned(api, 'item-groups', 'name_th', input.name_th)
         }

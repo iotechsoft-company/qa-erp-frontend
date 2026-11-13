@@ -39,8 +39,13 @@ export class ApiClient {
     return (await res.json()) as T
   }
 
+  /** Raw response for contracts that assert an expected non-2xx status and body. */
+  async postResponse(path: string, data: unknown) {
+    return this.request.post(`/api${path}`, { headers: this.headers(), data })
+  }
+
   async post<T = unknown>(path: string, data: unknown) {
-    const res = await this.request.post(`/api${path}`, { headers: this.headers(), data })
+    const res = await this.postResponse(path, data)
     if (!res.ok()) throw new Error(`POST ${path} → ${res.status()} ${await res.text()}`)
     return (await res.json()) as T
   }
