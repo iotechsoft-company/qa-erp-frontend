@@ -40,20 +40,21 @@ Playwright Test + TypeScript · pnpm · zod (env validation) · @faker-js/faker 
 9. Use `BasePage.alert` for MUI alerts — `getByRole('alert')` also matches Next.js's hidden `#__next-route-announcer__`.
 
 ## QA tooling (shared by Claude Code and Codex)
+
 Skills: source of truth is `.claude/skills/<name>/SKILL.md`; `.agents/skills/<name>` are symlinks so Codex discovers the same files.
 Invoke: Claude Code `/triage-failure` · Codex `$triage-failure` (both also auto-trigger from the description).
 Playwright MCP: Claude Code reads `.mcp.json`, Codex reads `.codex/config.toml` (project must be **trusted** in Codex) — keep them in sync.
 Hooks (`scripts/hooks/`, both agents) block risky git/secret/ERP-source actions and enforce tsc+eslint on files you edit before you finish — if a hook blocks you, follow its message; don't work around it.
 New skill → create it under `.claude/skills/<name>/`, then `ln -s ../../.claude/skills/<name> .agents/skills/<name>`.
 
-| Need | Use |
-|---|---|
-| Test failed / CI red | `.claude/skills/triage-failure` → classify flaky / test bug / data-env / app bug |
-| Test passes only sometimes | `.claude/skills/flaky-hunter` → measure with `--repeat-each`, deterministic fix |
-| New spec for a page/flow | `.claude/skills/write-e2e-spec` → ERP source → locators → POM → factory → spec |
-| App bug confirmed | `.claude/skills/report-bug` → GitHub issue in erp-api / erp-frontend |
-| Explore a live page / find locators | Playwright MCP (`.mcp.json` / `.codex/config.toml`, starts logged in from `.auth/user.json` — run `pnpm auth` first; passwords from `.env` are masked) |
-| Throwaway recon script | `.claude/skills/webapp-testing` (vendored from anthropics/skills @ `2c5958e`, Apache-2.0). Python Playwright, uses `networkidle`/timeouts — **recon only, never copy its patterns into specs** |
+| Need                                | Use                                                                                                                                                                                            |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Test failed / CI red                | `.claude/skills/triage-failure` → classify flaky / test bug / data-env / app bug                                                                                                               |
+| Test passes only sometimes          | `.claude/skills/flaky-hunter` → measure with `--repeat-each`, deterministic fix                                                                                                                |
+| New spec for a page/flow            | `.claude/skills/write-e2e-spec` → ERP source → locators → POM → factory → spec                                                                                                                 |
+| App bug confirmed                   | `.claude/skills/report-bug` → GitHub issue in erp-api / erp-frontend                                                                                                                           |
+| Explore a live page / find locators | Playwright MCP (`.mcp.json` / `.codex/config.toml`, starts logged in from `.auth/user.json` — run `pnpm auth` first; passwords from `.env` are masked)                                         |
+| Throwaway recon script              | `.claude/skills/webapp-testing` (vendored from anthropics/skills @ `2c5958e`, Apache-2.0). Python Playwright, uses `networkidle`/timeouts — **recon only, never copy its patterns into specs** |
 
 ## Found an app bug?
 
@@ -78,3 +79,23 @@ mark the spec with `test.fail()` + `annotation: { type: 'issue', description: <u
 - MUI drawers/modals temporarily hide the background table from accessibility queries. Wait for its named column header to be visible before reading columns. Empty/loading rows use one colspan cell; exclude them when comparing API rows with rendered columns.
 - Cleanup products in dependency order: bundles first, then component singles, then item groups. Otherwise components/groups can return 409. The cleanup script reports a nonzero exit code if any target read/delete fails.
 - The dev API has occasionally returned 404 for an item-group detail GET immediately after successful POST. Factory contracts assert the create response immediately and allow up to 10 seconds for the detail read to become visible.
+- `parent_item_group_id` is optional in CreateItemGroupDTO, but omission currently triggers incorrect parent validation on dev (erp-api#13). Factories send explicit null for root groups; the omitted-parent regression characterizes the exact HTTP 400/400000 parent-validation message with an issue annotation; a fix turns that characterization red.
+- Mutation tests run in the `chromium-mutation` project with one worker to isolate shared tree rebuilds. Read-only Chromium tests remain parallel; no test relies on another test's data or order.
+
+- `/purchasers` is the supplier master-data UI (Thai labels use “ผู้จัดส่ง”), calling `/supplier-bc/v1/suppliers`; customer master data calls `/sales-bc/v1/customers`.
+- Customer/supplier lists use a debounced search plus an explicit search button, local pagination state, and combined Thai/English name cells. Match rows by their unique code; compare pagination against the returned code column rather than the combined name cell.
+- Customer credit limit/terms reject negative numbers, but supplier credit terms have no minimum in the current DTO/schema. Supplier country/currency inputs validate lengths and uppercase values when building the request payload; do not infer a 13-digit tax-ID UI validation rule from realistic factory data (the form currently requires 1–20 characters).
+
+- Sales `s` JSON search operators differ from `filter` operators: JSON uses `cont`/`starts`/`ieq` without `$`, while filter uses `field||$cont||value`. Current sales list UI sends unsupported `$contL` (erp-frontend#2); lifecycle specs use real pagination instead of rewriting requests.
+- QuotationDocumentType on the backend is uppercase (`STANDARD_QUOTATION`, etc.); current frontend enum is lowercase and blocks QT/SO creation (erp-frontend#3). DN requires real `so_id` and `so_item_id`, never customer/product IDs (erp-frontend#4).
+- Only draft QT/DN have API update/delete; their UI controls are missing (erp-frontend#5). SO is conversion-only, has no PUT/DELETE, and is cleaned by cancellation. State changes can reorder list rows across pages; re-find a document after a transition.
+- Sales numbers are generated by the server. Prefix factory `remark_th` with a unique `E2E-` marker and check response `remark.th` before cleanup. Cancelled sales documents are immutable audit records, not deletable test leftovers: report retained audits separately from active E2E records. Never claim zero total rows when audits remain.
+- Stock-balance responses use `product_sku`, `total_qty`, `expired_qty`, and warehouse IDs. Do not assume the frontend IStockBalance aliases (`sku`/`available_qty`) match the wire response.
+
+- Sales draft PUT can intermittently return 404 after successful POST/GET of the same ID (7/20 measured serial contract runs). Update contracts are quarantined with an erp-api#14 issue annotation; do not retry writes to hide this unresolved behavior.
+
+- Concurrent item-group create/update can return HTTP 500 / PostgreSQL 40P01 deadlock (erp-api#15). Always await allSettled for concurrent mutations before cleanup so one failed request cannot race remaining writes; the intermittent repro remains quarantined.
+
+- Customer/supplier smoke searches choose the first non-E2E code. If none is visible, search an unmatched value and assert the empty state; never depend on a parallel mutation test’s record.
+- Sales regressions for frontend#2–#5 characterize the exact open bug (request payload + status/error or confirmed draft controls absent), retaining issue annotations. Do not use broad test.fail for these cases; replace characterization with healthy-flow assertions when fixed.
+- Sales cleanup follows backend transition guards: cancel linked SO before re-reading/cancelling QT; retain linked/expired QT and partial/closed/delivered SO. DN supports cancellation only from DRAFT/PENDING_APPROVAL/SUBMITTED (drafts are deleted). Always attempt owned customer cleanup and report aggregated failures.

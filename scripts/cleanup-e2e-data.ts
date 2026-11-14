@@ -7,10 +7,14 @@
  * ไม่แตะ user e2e.admin / e2e.staff
  */
 import { existsSync, readFileSync } from 'node:fs'
+import { salesCleanupAction, type SalesCleanupRecord, type SalesResource } from '../src/data/sales-cleanup.ts'
 
 const APPLY = process.argv.includes('--apply')
 
-const TARGETS = [
+const TARGETS: { path: string; field: string; document?: SalesResource }[] = [
+  { path: '/sales-bc/v1/delivery-notes', field: 'remark_th', document: 'delivery-notes' },
+  { path: '/sales-bc/v1/sales-orders', field: 'remark_th', document: 'sales-orders' },
+  { path: '/sales-bc/v1/quotations', field: 'remark_th', document: 'quotations' },
   { path: '/sales-bc/v1/customers', field: 'code' },
   { path: '/supplier-bc/v1/suppliers', field: 'code' },
   { path: '/inventory-bc/v1/products', field: 'sku' },
@@ -46,6 +50,7 @@ let failures = 0
 
 for (const t of TARGETS) {
   const qs = new URLSearchParams({ filter: `${t.field}||$starts||E2E-`, ignore_limit: 'true' })
+  if (t.document === 'sales-orders') qs.set('relations', 'items')
   const res = await fetch(`${BASE}/api${t.path}?${qs}`, { headers })
   if (!res.ok) {
     failures += 1
@@ -56,25 +61,44 @@ for (const t of TARGETS) {
   // กันพลาด: filter ซ้ำฝั่ง client เผื่อ backend ไม่รองรับ $starts แล้วคืนทั้งหมด
   const ownedKey = (r: (typeof rows)[number]) =>
     String(
-      t.field === 'name_th'
-        ? ((r.attributes.name as { th?: string } | undefined)?.th ?? r.attributes.name_th ?? '')
-        : (r.attributes[t.field] ?? ''),
+      t.field === 'remark_th'
+        ? ((r.attributes.remark as { th?: string } | undefined)?.th ?? r.attributes.remark_th ?? '')
+        : t.field === 'name_th'
+          ? ((r.attributes.name as { th?: string } | undefined)?.th ?? r.attributes.name_th ?? '')
+          : (r.attributes[t.field] ?? ''),
     )
   // Bundles must be removed before component products or the API returns 409.
   const mine = rows
     .filter((r) => ownedKey(r).startsWith('E2E-'))
     .sort((a, b) => Number(b.attributes.type === 'bundle') - Number(a.attributes.type === 'bundle'))
+  const actionFor = (row: (typeof mine)[number]) =>
+    t.document ? salesCleanupAction(t.document, row.attributes as SalesCleanupRecord) : 'delete'
+  const retained = mine.filter((r) => actionFor(r) === 'retain')
+  const active = mine.filter((r) => actionFor(r) !== 'retain')
+  const cancelled = retained.filter((r) => r.attributes.status === 'CANCELLED').length
+  const terminal = retained.filter((r) => r.attributes.status !== 'CANCELLED')
   console.log(
-    `${t.path}: ${mine.length} E2E record(s)${rows.length !== mine.length ? ` (ignored ${rows.length - mine.length} non-E2E)` : ''}`,
+    `${t.path}: ${active.length} ${t.document ? 'active ' : ''}E2E record(s)${t.document ? `; ${cancelled} cancelled audit record(s) retained; ${terminal.length} non-cancellable record(s) retained` : ''}${rows.length > mine.length ? ` (ignored ${rows.length - mine.length} non-E2E)` : ''}`,
   )
-  for (const r of mine) {
+  for (const r of terminal)
+    console.log(
+      `  retained: ${ownedKey(r)} (${String(r.attributes.status)}, linked SO: ${Boolean(r.attributes.sales_order_id)})`,
+    )
+  for (const r of active) {
     if (!APPLY) {
       console.log(`  - ${ownedKey(r)} (${r.id})`)
       continue
     }
-    const del = await fetch(`${BASE}/api${t.path}/${r.id}`, { method: 'DELETE', headers })
+    const cancel = actionFor(r) === 'cancel'
+    const del = await fetch(`${BASE}/api${t.path}/${r.id}${cancel ? '/cancel' : ''}`, {
+      method: cancel ? 'POST' : 'DELETE',
+      headers: { ...headers, ...(cancel ? { 'Content-Type': 'application/json' } : {}) },
+      ...(cancel ? { body: JSON.stringify({ cancel_reason: 'E2E- จบการทดสอบ' }) } : {}),
+    })
     if (!del.ok) failures += 1
-    console.log(`  ${del.ok ? '✓ deleted' : `✗ ${del.status}`} ${ownedKey(r)}`)
+    console.log(
+      `  ${del.ok ? (cancel ? '✓ cancelled (audit retained)' : '✓ deleted') : `✗ ${del.status}`} ${ownedKey(r)}`,
+    )
   }
 }
 if (!APPLY) console.log('\n(dry-run — add --apply to delete)')

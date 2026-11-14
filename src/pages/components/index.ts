@@ -20,11 +20,21 @@ export class DataTable {
     return this.root.locator('tbody').getByRole('row').allTextContents()
   }
 
-  async readColumn(column: string) {
+  private async columnIndex(column: string) {
     await expect(this.root.getByRole('columnheader', { name: column, exact: true })).toBeVisible()
     const headers = await this.root.getByRole('columnheader').allTextContents()
     const index = headers.indexOf(column)
     if (index < 0) throw new Error(`Unknown column: ${column}`)
+    return { index, headers }
+  }
+
+  async cell(row: string | Locator, column: string) {
+    const { index } = await this.columnIndex(column)
+    return (typeof row === 'string' ? this.row(row) : row).getByRole('cell').nth(index)
+  }
+
+  async readColumn(column: string) {
+    const { index, headers } = await this.columnIndex(column)
     // Empty/loading rows use a single colspan cell rather than one cell per column.
     const rows = this.root
       .locator('tbody')
@@ -40,7 +50,10 @@ export class DataTable {
     await this.root.getByRole('columnheader', { name: column, exact: true }).getByRole('button').click()
   }
 
-  async expectPagination(emptyText: string) {
+  async expectPagination(
+    emptyText: string,
+    identity?: { endpoint: string; column: string; field: 'code' | 'quotation_number' | 'so_number' | 'dn_number' },
+  ) {
     if (!(await this.next.count())) {
       await expect(this.root.getByText(emptyText, { exact: true })).toBeVisible()
       return
@@ -53,7 +66,7 @@ export class DataTable {
     const response = this.page.waitForResponse((res) => {
       const url = new URL(res.url())
       return (
-        url.pathname.startsWith('/api/inventory-bc/v1/') &&
+        (identity ? url.pathname === identity.endpoint : url.pathname.startsWith('/api/inventory-bc/v1/')) &&
         url.searchParams.get('page') === '2' &&
         res.request().method() === 'GET'
       )
@@ -61,9 +74,22 @@ export class DataTable {
     await this.goToPage(2)
     const result = await response
     expect(result.ok()).toBe(true)
-    const json = (await result.json()) as { data: { attributes: { sku?: string; name: { th: string } } }[] }
-    const column = json.data[0]?.attributes.sku ? 'รหัส SKU' : 'ชื่อภาษาไทย'
-    const values = json.data.map((row) => row.attributes.sku ?? row.attributes.name.th)
+    const json = (await result.json()) as {
+      data: {
+        attributes: {
+          sku?: string
+          code?: string
+          quotation_number?: string
+          so_number?: string
+          dn_number?: string
+          name: { th: string }
+        }
+      }[]
+    }
+    const column = identity?.column ?? (json.data[0]?.attributes.sku ? 'รหัส SKU' : 'ชื่อภาษาไทย')
+    const values = json.data.map((row) =>
+      identity ? row.attributes[identity.field] : (row.attributes.sku ?? row.attributes.name.th),
+    )
     await expect.poll(() => this.readColumn(column)).toEqual(values)
     await this.previous.click()
     await expect(this.page.getByRole('button', { name: 'page 1', exact: true })).toHaveAttribute('aria-current', 'page')

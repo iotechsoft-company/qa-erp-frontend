@@ -1,6 +1,7 @@
 import { faker } from '@faker-js/faker'
 
-import { E2E_PREFIX } from '@utils/test-data'
+import { e2eCode } from './ids'
+export { e2eCode } from './ids'
 
 import {
   thaiAddress,
@@ -21,11 +22,6 @@ import {
  *   → ค้นหาและ cleanup ได้ด้วย filter `code||$starts||E2E-`
  * ทุก factory รับ overrides เพื่อกำหนดค่าเฉพาะในเทส
  */
-
-const runId = () =>
-  `${Date.now().toString(36).toUpperCase()}${faker.string.alphanumeric({ length: 3, casing: 'upper' })}`
-
-export const e2eCode = (entity: string) => `${E2E_PREFIX}-${entity}-${runId()}`
 
 // ─── sales-bc: POST /sales-bc/v1/customers (CreateCustomerDTO) ───
 export type CustomerInput = {
@@ -95,6 +91,7 @@ export type SupplierInput = {
   is_vat_registered?: boolean
   supplier_type?: 'company' | 'individual'
   supplier_group_id?: string
+  payment_terms_template?: string
   contact_phone?: string
   address?: string
   country?: string
@@ -105,17 +102,18 @@ export type SupplierInput = {
 }
 
 export const buildSupplier = (overrides: Partial<SupplierInput> = {}): SupplierInput => {
+  const type = overrides.supplier_type ?? 'company'
   const c = thaiCompany()
   const addr = thaiAddress()
   return {
     code: e2eCode('SUP'),
-    name_th: c.name_th,
-    name_en: c.name_en,
-    alias: c.alias,
-    tax_id: thaiCorporateTaxId(),
-    is_vat_registered: true,
-    supplier_type: 'company',
-    contact_phone: thaiLandline(addr.phonePrefix),
+    name_th: type === 'individual' ? thaiPersonName() : c.name_th,
+    name_en: type === 'individual' ? undefined : c.name_en,
+    alias: type === 'individual' ? undefined : c.alias,
+    tax_id: type === 'individual' ? thaiPersonalTaxId() : thaiCorporateTaxId(),
+    is_vat_registered: type === 'company',
+    supplier_type: type,
+    contact_phone: type === 'individual' ? thaiMobile() : thaiLandline(addr.phonePrefix),
     address: addr.line,
     country: 'TH',
     credit_terms: faker.helpers.arrayElement([30, 45, 60, 90]),
@@ -145,9 +143,8 @@ export const buildProduct = (
   overrides: Partial<ProductInput> = {},
 ): ProductInput => {
   const p = thaiProduct()
-  const tag = runId()
   return {
-    sku: `${E2E_PREFIX}-${p.sku}-${tag}`,
+    sku: e2eCode(p.sku),
     name_th: p.th,
     name_en: p.en,
     type: 'single',
@@ -168,6 +165,7 @@ export const buildItemGroup = (overrides: Partial<ItemGroupInput> = {}): ItemGro
   name_th: `${e2eCode('IG')} เครื่องเขียนสำนักงาน`,
   name_en: 'Office stationery',
   is_group: false,
+  parent_item_group_id: null,
   ...overrides,
 })
 
@@ -178,3 +176,5 @@ export const buildUom = (overrides: Partial<UomInput> = {}): UomInput => ({
   is_whole_number: true,
   ...overrides,
 })
+
+export * from './sales'
