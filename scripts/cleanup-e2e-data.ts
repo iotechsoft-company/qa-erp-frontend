@@ -9,9 +9,17 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { salesCleanupAction, type SalesCleanupRecord, type SalesResource } from '../src/data/sales-cleanup.ts'
 
+import {
+  purchasingCleanupAction,
+  type PurchasingCleanupRecord,
+  type PurchasingResource,
+} from '../src/data/purchasing-cleanup.ts'
+
 const APPLY = process.argv.includes('--apply')
 
-const TARGETS: { path: string; field: string; document?: SalesResource }[] = [
+const TARGETS: { path: string; field: string; document?: SalesResource | PurchasingResource }[] = [
+  { path: '/inventory-bc/v1/goods-receipts', field: 'remark_th', document: 'goods-receipts' },
+  { path: '/supplier-bc/v1/purchase-orders', field: 'remark_th', document: 'purchase-orders' },
   { path: '/sales-bc/v1/delivery-notes', field: 'remark_th', document: 'delivery-notes' },
   { path: '/sales-bc/v1/sales-orders', field: 'remark_th', document: 'sales-orders' },
   { path: '/sales-bc/v1/quotations', field: 'remark_th', document: 'quotations' },
@@ -50,7 +58,7 @@ let failures = 0
 
 for (const t of TARGETS) {
   const qs = new URLSearchParams({ filter: `${t.field}||$starts||E2E-`, ignore_limit: 'true' })
-  if (t.document === 'sales-orders') qs.set('relations', 'items')
+  if (t.document === 'sales-orders' || t.document === 'purchase-orders') qs.set('relations', 'items')
   const res = await fetch(`${BASE}/api${t.path}?${qs}`, { headers })
   if (!res.ok) {
     failures += 1
@@ -71,8 +79,11 @@ for (const t of TARGETS) {
   const mine = rows
     .filter((r) => ownedKey(r).startsWith('E2E-'))
     .sort((a, b) => Number(b.attributes.type === 'bundle') - Number(a.attributes.type === 'bundle'))
-  const actionFor = (row: (typeof mine)[number]) =>
-    t.document ? salesCleanupAction(t.document, row.attributes as SalesCleanupRecord) : 'delete'
+  const actionFor = (row: (typeof mine)[number]) => {
+    if (t.document === 'purchase-orders' || t.document === 'goods-receipts')
+      return purchasingCleanupAction(t.document, row.attributes as PurchasingCleanupRecord)
+    return t.document ? salesCleanupAction(t.document, row.attributes as SalesCleanupRecord) : 'delete'
+  }
   const retained = mine.filter((r) => actionFor(r) === 'retain')
   const active = mine.filter((r) => actionFor(r) !== 'retain')
   const cancelled = retained.filter((r) => r.attributes.status === 'CANCELLED').length

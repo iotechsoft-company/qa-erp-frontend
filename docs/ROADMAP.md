@@ -19,19 +19,19 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 - [x] inventory: products, item-groups, product-groups — list + create/edit forms, read-only search/pagination, UI CRUD and Thai required-field validation. Sort UI remains unavailable (see Phase 2 verification).
 - [x] customer: customers · supplier: purchasers — list/search/pagination, create/edit POMs, company + individual UI CRUD, delete cancellation, Thai required/length and module-specific validation.
 - [ ] sales: quotations, orders, delivery-notes, create — POMs, draft API create/read/delete (update quarantined), list/filter/pagination, UI QT→SO lifecycle and DN read/cancel validation implemented; full UI CRUD blocked by erp-frontend#2–#5 (see Sales verification).
-- [ ] purchasing: orders, goods-receipts, create
+- [ ] purchasing: orders, goods-receipts, create — list/create POMs, smoke, Thai validation, PO approve/send/cancel and GR UI receipt/stock reversal covered; full UI CRUD/cancel blocked by frontend#6/#7 and draft PUT quarantined under api#14 (see Purchasing verification).
 - [ ] reports: sales, purchases (filters + export)
 - [ ] settings: shop, sales, item-groups
 
 ## Phase 3 — Regression / CRUD (`@mutation`, dev)
 
-- [ ] More factories from `.openapi/*.json`: customer-groups, supplier-groups, brands, item-prices, quotations, sales-orders, purchase-orders, goods-receipts
+- [ ] More factories from `.openapi/*.json`: customer-groups, supplier-groups, brands, item-prices, quotations, sales-orders (purchasing PO/GR factories are implemented)
 - [x] Extend `scripts/cleanup-e2e-data.ts` TARGETS for new Phase 2 entities: item-groups and uoms (`name_th`, response `name.th`). Extend again when later factories are added.
 
 - [x] Product CRUD and bundle CRUD through UI, with API cleanup
 - [ ] Product image upload via presigned flow
 - [ ] Sales flow: quotation → order → delivery note
-- [ ] Purchase flow: PO → goods receipt → stock balance changes
+- [ ] Purchase flow: PO → goods receipt → stock balance changes — implemented with API GR cancellation workaround for frontend#7, awaiting PR review/merge
 - [x] Inventory required-field validation errors (Thai), including bundles requiring at least one component
 - [ ] Validation errors in other modules
 
@@ -48,13 +48,15 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 <!-- filed via .claude/skills/report-bug — format: - repo#n — title -->
 
 - [erp-api#13](https://github.com/iotechsoft-company/erp-api/issues/13) — POST item-groups rejects omitted optional parent; factory sends explicit null; separate issue-annotated contract characterizes the exact 400/400000 leaf-parent rejection.
-- [erp-api#14](https://github.com/iotechsoft-company/erp-api/issues/14) — read-after-write 404 under concurrent load; two Sales update regressions remain fixme.
+- [erp-api#14](https://github.com/iotechsoft-company/erp-api/issues/14) — read-after-write 404 under concurrent load; Sales and Purchasing update regressions remain fixme.
 - [erp-api#15](https://github.com/iotechsoft-company/erp-api/issues/15) — concurrent item-group writes return 500/40P01 deadlock; repro retained as fixme because the failure is intermittent (2/3 initially; 1/10 after awaiting all writes before cleanup).
 
 - [erp-frontend#2](https://github.com/iotechsoft-company/erp-frontend/issues/2) — QT/SO/DN searches send unsupported `$contL` JSON search operator (400).
 - [erp-frontend#3](https://github.com/iotechsoft-company/erp-frontend/issues/3) — QT/SO creation sends lowercase quotation document_type (400).
 - [erp-frontend#4](https://github.com/iotechsoft-company/erp-frontend/issues/4) — DN form sends customer/product IDs instead of SO/SO-item IDs.
 - [erp-frontend#5](https://github.com/iotechsoft-company/erp-frontend/issues/5) — QT/DN draft edit/delete UI is absent although their API supports draft CRUD.
+- [erp-frontend#6](https://github.com/iotechsoft-company/erp-frontend/issues/6) — purchasing draft PO/GR edit/delete UI absent; API draft CRUD supported.
+- [erp-frontend#7](https://github.com/iotechsoft-company/erp-frontend/issues/7) — submitted GR cancel hidden by RECEIVED PO status; API cancellation reverses stock correctly.
 
 ## Phase 2 verification (2026-11-13)
 
@@ -142,3 +144,21 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 - Addressed the additional non-blocking suggestion in this PR: item-group optional-parent case now asserts HTTP 400, status code 400000 and the exact leaf-parent message, keeping issue #13 annotation and API cleanup. No broad test.fail remains for this case. A fixed backend, different error, auth failure, network failure or cleanup failure fails normally.
 - ApiClient.postResponse exposes the authenticated/CSRF-protected raw response for error contracts; normal post/create use the same request path and still throw on non-2xx.
 - Follow-up validation: `pnpm check-types && pnpm lint` passed with 0 errors / 0 warnings; `pnpm exec playwright test tests/api/item-groups.spec.ts tests/api/factories.spec.ts --repeat-each=2 --retries=0 --reporter=list` passed 13 executions (including setup), no expected failures/retries/skips. Final cleanup dry-run: 0 active Sales and 0 master-data E2E records; cancelled audits remain DN 12, SO 89, QT 90. No merge performed.
+
+## Purchasing verification (2026-11-14)
+
+- Branch `codex/purchasing`; new `PurchaseOrdersPage`, `GoodsReceiptsPage` (shared `PurchaseDocumentsPage`) and `PurchaseCreatePage`. Registered exports/fixtures and extended shared table identity fields for po_number/grn_number.
+- New files: `src/pages/purchase-{documents,create}.page.ts`, `src/data/factories/purchasing.ts`, `src/api/purchasing-scenario.ts`, `src/data/purchasing-cleanup.ts`, `tests/purchasing/documents.spec.ts`, and `tests/api/purchasing-{factories,cleanup}.spec.ts`.
+- Added 25 cases: 17 UI (8 read-only smoke and 9 mutation/lifecycle/validation/bug-signature cases), 6 API contracts (2 create/read/delete, 2 DTO zero-quantity checks, 2 quarantined PUT), and 2 cleanup-policy checks.
+- Factories match fetched CreatePurchaseOrderDTO and CreateGoodsReceiptDTO: uppercase PO enum, ISO dates, realistic Thai remarks, real PO item IDs, E2E lot number; server generates document numbers. Mutation scenarios own supplier/product and read only existing leaf item group/UOM/stock warehouse references.
+- UI coverage: create PO -> draft list/details; approve -> send -> cancel with blank/whitespace cancel-reason checks; receive a sent PO through UI and direct create GR mode, verifying stock +1 and API cancellation -> stock 0 / PO SENT. GR cancellation is explicitly API-based because frontend#7 prevents the UI action; no claim of full UI CRUD.
+- Validation covers empty forms disabled, Thai missing document date and zero-quantity confirmation in both modes, and exact API DTO rejection for qty=0. API failures unrelated to a known bug fail normally; no broad test.fail was added.
+- frontend#6: both draft edit/delete probes failed 3/3 per document kind; frontend#7: submitted-GR cancel probe failed 3/3. Issue-linked characterizations verify a real draft/submitted record, its loaded details and absent controls. A frontend fix turns those checks red for migration to healthy flows.
+- api#14 occurrence extended to Purchasing: PUT returned 404 after POST and exact-ID GET succeeded. Isolated PO measurement failed 5/10; GR passed 10/10 isolated but also failed in the preceding combined scope. Only two update cases remain issue-linked fixme; write retries/sleeps/timeouts were not added. Evidence comment: https://github.com/iotechsoft-company/erp-api/issues/14#issuecomment-6874247155
+- Cleanup targets GR before PO and master data. Drafts delete; submitted GR cancels/reverses stock; PO cancellation obeys allowed states and net-received guard. Partial seed success is found by owned SKU/code; nonzero stock prevents product deletion. Cancelled receipts/orders and reversed stock history remain audit records and are counted explicitly.
+- Setup gotchas corrected: stock-balances uses report query params, warehouse must be stock leaf, optional code affects warehouse labels, nested modal close assertions must target the specific dialog title. No ERP source edits or data-testid requests were needed.
+- `pnpm check-types && pnpm lint`: exit 0, 0 errors / 0 warnings. Prettier and git diff --check passed.
+- New Purchasing specs repeated 3 times with retries=0: exit 0, 76 executions = 70 passed + 6 fixme/skipped update executions. No unexpected failures.
+- Full `pnpm test --retries=0 --reporter=list`: exit 0, 117 executions = 112 passed + 5 fixme/skipped cases (existing Sales update x2/race x1 plus Purchasing update x2). No expected-failure markers or retries. Known UI bug characterizations pass while the exact defects exist.
+- Final cleanup dry-run after clearing four owned products left by the early stock-query setup error: 0 active E2E documents, 0 master-data E2E records and 0 non-cancellable remainders. Retained cancelled audits: GR 20, PO 63, DN 13, SO 94, QT 95 (285 total); reversed stock history/zero-quantity lots are retained by the system. This is not zero total audit rows.
+- Purchasing remains unchecked pending review and the stated application gaps. No merge performed.

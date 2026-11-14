@@ -11,3 +11,6 @@ export * from './quotations.page'
 export * from './sales-orders.page'
 export * from './delivery-notes.page'
 export * from './sales-create.page'
+
+export * from './purchase-documents.page'
+export * from './purchase-create.page'
