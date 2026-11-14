@@ -17,7 +17,7 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 
 - [x] Shared components POM: data table (rows/columns, sort API, pagination), search box, inline filter, confirm dialog, snackbar/alert, MUI select/autocomplete. Inventory uses inline filters; no filter drawer is rendered.
 - [x] inventory: products, item-groups, product-groups — list + create/edit forms, read-only search/pagination, UI CRUD and Thai required-field validation. Sort UI remains unavailable (see Phase 2 verification).
-- [ ] customer: customers · supplier: purchasers — implemented, awaiting PR review/merge: list/search/pagination, create/edit POMs, company + individual UI CRUD, delete cancellation, Thai required/length and module-specific validation.
+- [x] customer: customers · supplier: purchasers — list/search/pagination, create/edit POMs, company + individual UI CRUD, delete cancellation, Thai required/length and module-specific validation.
 - [ ] sales: quotations, orders, delivery-notes, create — POMs, draft API create/read/delete (update quarantined), list/filter/pagination, UI QT→SO lifecycle and DN read/cancel validation implemented; full UI CRUD blocked by erp-frontend#2–#5 (see Sales verification).
 - [ ] purchasing: orders, goods-receipts, create
 - [ ] reports: sales, purchases (filters + export)
