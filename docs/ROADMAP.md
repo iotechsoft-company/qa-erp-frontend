@@ -79,7 +79,7 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 
 ## Phase 3 — Regression / CRUD (`@mutation`, dev)
 
-- [ ] More factories from `.openapi/*.json`: customer-groups, supplier-groups, brands, item-prices, quotations, sales-orders (purchasing PO/GR factories are implemented)
+- [ ] More factories/contracts/cleanup from `.openapi/*.json`: customer-groups, supplier-groups, brands, item-prices and remaining workflow entities (QT/DN and purchasing PO/GR factories are implemented; SO is created by QT conversion, not direct POST)
 - [x] Extend `scripts/cleanup-e2e-data.ts` TARGETS for new Phase 2 entities: item-groups and uoms (`name_th`, response `name.th`). Extend again when later factories are added.
 
 - [x] Product CRUD and bundle CRUD through UI, with API cleanup
@@ -87,7 +87,7 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 - [ ] Sales flow: quotation → order → delivery note
 - [ ] Purchase flow: PO → goods receipt → stock balance changes — implemented with API GR cancellation workaround for frontend#7, awaiting PR review/merge
 - [x] Inventory required-field validation errors (Thai), including bundles requiring at least one component
-- [ ] Validation errors in other modules
+- [ ] Validation errors in remaining modules/flows — customer/supplier required/length/domain validation, Sales customer/date and Purchasing document-date/zero-qty/cancel-reason checks are implemented; see workflow matrix for gaps
 
 ## Phase 4 — Extras
 
