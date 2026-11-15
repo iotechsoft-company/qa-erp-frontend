@@ -1,5 +1,6 @@
 import { PurchasingScenario, type PurchaseRecord } from '@api/purchasing-scenario'
 import { e2eCode } from '@data/factories'
+import { bangkokDate } from '@data/dates'
 import { type PurchaseCreatePage } from '@pages/purchase-create.page'
 import { type PurchaseDocumentsPage } from '@pages/purchase-documents.page'
 import { expect, test } from '@fixtures/test'
@@ -117,18 +118,10 @@ test.describe('Purchasing UI', { tag: ['@purchasing', '@regression', '@mutation'
       await expect.poll(() => s.stockQty()).toBe(1)
       await goodsReceiptsPage.completed()
       await goodsReceiptsPage.search(receipt.data.attributes.grn_number)
+      await expect(goodsReceiptsPage.dataTable.row(receipt.data.attributes.grn_number)).toBeVisible()
       const cancelled = await s.cancelReceipt(receipt.data.id)
       expect(cancelled.status).toBe('CANCELLED')
-      await expect
-        .poll(
-          async () =>
-            (
-              await api.get<{ data: { attributes: { status: string } } }>(
-                `/supplier-bc/v1/purchase-orders/${cancelled.po_id}`,
-              )
-            ).data.attributes.status,
-        )
-        .toBe('SENT')
+      await expect.poll(() => s.orderStatus(cancelled.po_id!)).toBe('SENT')
       await expect.poll(() => s.stockQty()).toBe(0)
     } finally {
       await s.cleanup()
@@ -157,18 +150,10 @@ test.describe('Purchasing UI', { tag: ['@purchasing', '@regression', '@mutation'
       await goodsReceiptsPage.goto()
       await goodsReceiptsPage.completed()
       await goodsReceiptsPage.search(receipt.data.attributes.grn_number!)
+      await expect(goodsReceiptsPage.dataTable.row(receipt.data.attributes.grn_number!)).toBeVisible()
       const cancelled = await s.cancelReceipt(receipt.data.id)
       expect(cancelled.status).toBe('CANCELLED')
-      await expect
-        .poll(
-          async () =>
-            (
-              await api.get<{ data: { attributes: { status: string } } }>(
-                `/supplier-bc/v1/purchase-orders/${cancelled.po_id}`,
-              )
-            ).data.attributes.status,
-        )
-        .toBe('SENT')
+      await expect.poll(() => s.orderStatus(cancelled.po_id!)).toBe('SENT')
       await expect.poll(() => s.stockQty()).toBe(0)
     } finally {
       await s.cleanup()
@@ -193,6 +178,7 @@ test.describe('Purchasing UI', { tag: ['@purchasing', '@regression', '@mutation'
         )
         expect(submitted.data.attributes.status).toBe('SUBMITTED')
         await expect.poll(() => s.stockQty()).toBe(1)
+        await expect.poll(() => s.orderStatus(order.id)).toBe('RECEIVED')
         await goodsReceiptsPage.goto()
         await goodsReceiptsPage.completed()
         await goodsReceiptsPage.search(receipt.grn_number!)
@@ -231,7 +217,7 @@ test.describe('Purchasing UI', { tag: ['@purchasing', '@regression', '@mutation'
         await purchaseCreatePage.documentDate.fill('')
         await purchaseCreatePage.saveButton(mode).click()
         await expect(purchaseCreatePage.alert).toContainText('กรุณาระบุวันที่เอกสาร')
-        await purchaseCreatePage.documentDate.fill(s.orderInput().document_date.slice(0, 10))
+        await purchaseCreatePage.documentDate.fill(bangkokDate())
         await purchaseCreatePage.setLine(s.sku, 'จำนวน', '0')
         await purchaseCreatePage.saveButton(mode).click()
         await expect(purchaseCreatePage.alert).toContainText('พบรายการสินค้าที่มีจำนวนเป็น 0 ไม่สามารถทำรายการได้')
@@ -249,9 +235,7 @@ test.describe('Purchasing UI', { tag: ['@purchasing', '@regression', '@mutation'
         : (list: PurchaseDocumentsPage) => list.completed()
     const create = async (s: PurchasingScenario) => {
       const order = await s.createOrder(kind === 'gr')
-      return kind === 'po'
-        ? order
-        : s.api.create<PurchaseRecord>('/inventory-bc/v1/goods-receipts', s.receiptInput(order))
+      return kind === 'po' ? order : s.createReceipt(order)
     }
 
     test(
