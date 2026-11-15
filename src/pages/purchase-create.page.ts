@@ -49,7 +49,10 @@ export class PurchaseCreatePage extends BasePage {
   }
   async applyHeaderDiscount(value: string, type: 'amount' | 'percent') {
     await this.page.getByRole('button', { name: type === 'percent' ? '%' : '฿', exact: true }).click()
-    await this.page.getByPlaceholder('0.00', { exact: true }).fill(value)
+    const input = this.page.getByPlaceholder('0.00', { exact: true })
+    // TODO(testid): inline summary card has no accessible container; see docs/TESTID_REQUESTS.md.
+    await expect(input, 'Header discount needs one unambiguous textbox').toHaveCount(1)
+    await input.fill(value)
     await this.page.getByRole('button', { name: 'ใช้ส่วนลด', exact: true }).click()
   }
   async expectLineTotal(sku: string, amount: number) {
