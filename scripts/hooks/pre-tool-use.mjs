@@ -66,6 +66,27 @@ if (call.kind === 'bash') {
     }
   }
 
+  // Claude (and its subagents) work in their own worktree (docs/WORKFLOW.md). The main checkout belongs to
+  // Codex: switching its branch there silently redirects Codex's next commit/merge to the wrong branch.
+  if (process.argv.includes('--agent=claude')) {
+    const switchesBranch =
+      /\bgit\s+(switch|checkout)\b(?![^|;&]*\s--\s)(?![^|;&]*\s--?(p|patch)\b)/.test(cmd) ||
+      /\bgh\s+pr\s+checkout\b/.test(cmd) ||
+      /\bgit\s+(rebase|merge|pull|cherry-pick|revert)\b/.test(cmd)
+    const movesElsewhere = /(^|[;&|]\s*)cd\s+\S|\bgit\s+-C\s+\S/.test(cmd)
+    if (switchesBranch && !movesElsewhere) {
+      const cwdForGit = input.cwd ?? root
+      const gitDir = run('git', ['rev-parse', '--git-dir'], cwdForGit).out.trim()
+      const commonDir = run('git', ['rev-parse', '--git-common-dir'], cwdForGit).out.trim()
+      if (gitDir && gitDir === commonDir) {
+        deny(
+          EVENT,
+          "Blocked by qa hook: Claude must not change branches/merge in the main checkout — it is Codex's working tree (docs/WORKFLOW.md). Use the Claude worktree: cd ../qa-erp-claude (or git -C ../qa-erp-claude …). For PR review read the diff with `gh pr diff <n>` / `git show origin/<branch>:<file>` instead of checking it out.",
+        )
+      }
+    }
+  }
+
   const writeish =
     /\b(rm|mv|cp|tee|touch|mkdir)\b|\bsed\s+-i|\bperl\s+-pi|\bgit\s+(-C\s+\S+\s+)?(add|commit|push|reset|checkout|restore|clean|stash|rebase|merge)\b|\bpnpm\s+(add|install|remove)\b/
   for (const dir of readonlyDirs(root)) {
