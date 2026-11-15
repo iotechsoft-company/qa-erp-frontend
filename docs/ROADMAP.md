@@ -2,7 +2,7 @@
 
 ## Business workflow priorities (2026-11-15)
 
-Coverage source of truth: [Business workflow matrix](WORKFLOW_COVERAGE.md), เทียบ [คู่มือระบบ](https://iots1.github.io/plan-erp/api-workflow-guide.html) กับ spec ที่ commit `a6d746a` รวม Purchasing ใน PR #3 ที่ยังไม่ merge ณ วันที่ตรวจ ครบ 25 รหัสหลักและหัวข้อย่อยในเนื้อหา รวม C9, A3.1, B5.1, E2.1, E2 P6 และ E3.1–E3.2; ตัวเลข 21/23 flows หน้าแรกไม่ใช้เป็น denominator
+Coverage source of truth: [Business workflow matrix](WORKFLOW_COVERAGE.md), เทียบ [คู่มือระบบ](https://iots1.github.io/plan-erp/api-workflow-guide.html) กับ Purchasing baseline PR #3 ที่ merge เป็น `ebcb6a7` รวม review fixes `c037770` และ cleanup regressions ครบ 25 รหัสหลักและหัวข้อย่อยในเนื้อหา รวม C9, A3.1, B5.1, E2.1, E2 P6 และ E3.1–E3.2; ตัวเลข 21/23 flows หน้าแรกไม่ใช้เป็น denominator
 
 **สถานะรวม: ยังไม่ครบ business workflow ทั้งระบบ** ไม่มี flow หลักใดที่ยืนยันครบทุกทางเลือก สิทธิ์ และผล stock/บัญชีตามคู่มือแล้ว การติ๊ก Phase 2 หมายถึงขอบเขตหน้า/POM/CRUD ที่ระบุเท่านั้น ไม่ใช่ business flow ทั้งสาย ผลรันตามวันที่ด้านล่างเป็นประวัติ ไม่ได้รัน suite ใหม่ในการอัปเดตเอกสารนี้
 
