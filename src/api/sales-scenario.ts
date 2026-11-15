@@ -12,7 +12,18 @@ type SalesRecord = {
   items?: { id: string; product_id: string; qty: number; delivered_qty?: number }[]
 }
 
-/** Owns a customer and document marker. Catalogue/stock are read-only references; no stock is posted. */
+export type SalesStockReference = {
+  product_id: string
+  product_sku: string
+  warehouse_id: string
+  warehouse_name: string
+}
+export interface SalesStockSource {
+  seed(): Promise<SalesStockReference>
+  cleanup(): Promise<void>
+}
+
+/** Owns customer/documents; reads catalogue stock by default or delegates stock ownership to an injected source. */
 export class SalesScenario {
   readonly marker = e2eCode('SALE')
   readonly customer = buildCustomer({ customer_type: 'company', credit_limit: 1_000_000 })
@@ -21,7 +32,10 @@ export class SalesScenario {
   sku = ''
   warehouseId = ''
   warehouseName = ''
-  constructor(readonly api: ApiClient) {}
+  constructor(
+    readonly api: ApiClient,
+    private readonly stockSource?: SalesStockSource,
+  ) {}
 
   private async catalogueStock() {
     const balances = await this.api.list<{
@@ -42,17 +56,22 @@ export class SalesScenario {
       throw new Error(
         'Sales fixture needs an existing catalogue product with at least 2 available units and a warehouse ID',
       )
-    return { product_id: stocked.product_id, product_sku: stocked.product_sku!, warehouse_id: stocked.warehouse_id! }
-  }
-  async seed(reference?: { product_id: string; product_sku: string; warehouse_id: string }) {
-    const stocked = reference ?? (await this.catalogueStock())
-    this.productId = stocked.product_id
-    this.sku = stocked.product_sku!
-    this.warehouseId = stocked.warehouse_id!
     const warehouse = await this.api.get<{ data: { attributes: { name: { th: string } } } }>(
-      `/inventory-bc/v1/warehouses/${this.warehouseId}`,
+      `/inventory-bc/v1/warehouses/${stocked.warehouse_id}`,
     )
-    this.warehouseName = warehouse.data.attributes.name.th
+    return {
+      product_id: stocked.product_id,
+      product_sku: stocked.product_sku!,
+      warehouse_id: stocked.warehouse_id!,
+      warehouse_name: warehouse.data.attributes.name.th,
+    }
+  }
+  async seed() {
+    const stocked = this.stockSource ? await this.stockSource.seed() : await this.catalogueStock()
+    this.productId = stocked.product_id
+    this.sku = stocked.product_sku
+    this.warehouseId = stocked.warehouse_id
+    this.warehouseName = stocked.warehouse_name
     const created = await this.api.create('/sales-bc/v1/customers', this.customer)
     this.customerId = created.id
   }
@@ -144,6 +163,7 @@ export class SalesScenario {
       for (const customer of customers)
         if (customer.code === this.customer.code) await this.api.delete(`/sales-bc/v1/customers/${customer.id}`)
     })
+    if (this.stockSource) await attempt(() => this.stockSource!.cleanup())
     if (failures.length) throw new AggregateError(failures, `Sales cleanup failed (${failures.length} operation(s))`)
   }
 }

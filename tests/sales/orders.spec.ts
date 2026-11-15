@@ -1,6 +1,6 @@
 import { SalesScenario } from '@api/sales-scenario'
 import { expect, test } from '@fixtures/test'
-import { OwnedSalesScenario } from '../helpers/owned-sales'
+import { OwnedSalesStock } from '@api/owned-sales-stock'
 
 test.describe('Sales orders', { tag: ['@sales', '@regression', '@mutation'] }, () => {
   test('quotation ส่ง → อนุมัติ → แปลง SO → อ่าน → ยกเลิก ผ่าน UI', async ({
@@ -50,7 +50,8 @@ test.describe('Sales orders', { tag: ['@sales', '@regression', '@mutation'] }, (
     { annotation: { type: 'issue', description: 'https://github.com/iotechsoft-company/erp-frontend/issues/3' } },
     async ({ allowMutation, api, salesCreatePage }) => {
       void allowMutation
-      const scenario = new OwnedSalesScenario(api)
+      const stock = new OwnedSalesStock(api)
+      const scenario = new SalesScenario(api, stock)
       try {
         await scenario.seed()
         await salesCreatePage.goto()
@@ -74,7 +75,7 @@ test.describe('Sales orders', { tag: ['@sales', '@regression', '@mutation'] }, (
           status: 'APPROVED',
           sales_order_id: json.data.id,
         })
-        expect(await scenario.inventory.stockQty()).toBe(1)
+        await stock.expectUnchanged()
       } finally {
         await scenario.cleanup()
       }

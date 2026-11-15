@@ -1,6 +1,6 @@
 import { SalesScenario } from '@api/sales-scenario'
 import { expect, test } from '@fixtures/test'
-import { OwnedSalesScenario } from '../helpers/owned-sales'
+import { OwnedSalesStock } from '@api/owned-sales-stock'
 
 test.describe('Delivery notes', { tag: ['@sales', '@regression', '@mutation'] }, () => {
   test('อ่านร่างและ validate เหตุผลยกเลิก ก่อนยกเลิกผ่าน UI', async ({ allowMutation, api, deliveryNotesPage }) => {
@@ -37,7 +37,8 @@ test.describe('Delivery notes', { tag: ['@sales', '@regression', '@mutation'] },
     { annotation: { type: 'issue', description: 'https://github.com/iotechsoft-company/erp-frontend/issues/4' } },
     async ({ allowMutation, api, salesCreatePage }) => {
       void allowMutation
-      const scenario = new OwnedSalesScenario(api)
+      const stock = new OwnedSalesStock(api)
+      const scenario = new SalesScenario(api, stock)
       try {
         await scenario.seed()
         await salesCreatePage.goto()
@@ -56,10 +57,25 @@ test.describe('Delivery notes', { tag: ['@sales', '@regression', '@mutation'] },
         const order = await api.get<{
           data: {
             id: string
-            attributes: { status: string; customer_id: string; items: { id: string; product_id: string }[] }
+            attributes: {
+              status: string
+              customer_id: string
+              quotation_id: string
+              remark: { th: string }
+              items: { id: string; product_id: string }[]
+            }
           }
         }>(`/sales-bc/v1/sales-orders/${payload.so_id}`, { relations: 'items' })
-        expect(order.data.attributes).toMatchObject({ status: 'CONFIRMED', customer_id: scenario.customerId })
+        expect(order.data.attributes).toMatchObject({
+          status: 'CONFIRMED',
+          customer_id: scenario.customerId,
+          remark: { th: expect.stringMatching(new RegExp(`^${scenario.marker}`)) },
+        })
+        const quotation = await api.get<{ data: { attributes: { remark: { th: string } } } }>(
+          `/sales-bc/v1/quotations/${order.data.attributes.quotation_id}`,
+        )
+        expect(quotation.data.attributes.remark.th).toMatch(new RegExp(`^${scenario.marker}`))
+        expect(json.data.attributes.remark.th).toMatch(new RegExp(`^${scenario.marker}`))
         expect(order.data.attributes.items).toEqual([
           expect.objectContaining({ id: payload.items[0].so_item_id, product_id: scenario.productId }),
         ])
@@ -67,7 +83,7 @@ test.describe('Delivery notes', { tag: ['@sales', '@regression', '@mutation'] },
           `/sales-bc/v1/delivery-notes/${json.data.id}`,
         )
         expect(read.data.attributes).toMatchObject({ status: 'DRAFT', so_id: order.data.id })
-        expect(await scenario.inventory.stockQty()).toBe(1)
+        await stock.expectUnchanged()
       } finally {
         await scenario.cleanup()
       }

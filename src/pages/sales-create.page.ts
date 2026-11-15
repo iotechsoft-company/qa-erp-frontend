@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test'
+import { expect, type Page, type Response } from '@playwright/test'
 import { BasePage } from './base.page'
 import { DataTable, MuiAutocomplete, MuiSelect } from './components'
 export type SalesMode = 'quotation' | 'order' | 'delivery'
@@ -66,23 +66,59 @@ export class SalesCreatePage extends BasePage {
   async save(mode: SalesMode) {
     await this.saveButton(mode).click()
   }
-  /** Wait for the final operation, including the QT→SO chain, before cleanup may start. */
+  get successDialog() {
+    return this.page
+      .getByRole('dialog')
+      .filter({ has: this.page.getByRole('heading', { name: 'ทำรายการขายสำเร็จ', exact: true }) })
+  }
+  /** Observe the complete UI chain and fail on its first failed POST, including approvals. */
   async create(mode: SalesMode) {
-    const result = this.page.waitForResponse((res) => {
-      const path = new URL(res.url()).pathname
-      return (
-        res.request().method() === 'POST' &&
-        (mode === 'order'
-          ? path.endsWith('/convert-to-sales-order')
-          : path === `/api/sales-bc/v1/${mode === 'delivery' ? 'delivery-notes' : 'quotations'}`)
-      )
+    const responses: Response[] = []
+    let rejectFailure!: (error: Error) => void
+    const failure = new Promise<never>((_, reject) => {
+      rejectFailure = reject
     })
-    await this.save(mode)
-    const response = await result
-    expect(response.status()).toBe(201)
-    const json = await response.json()
-    const field = { quotation: 'quotation_number', order: 'so_number', delivery: 'dn_number' }[mode]
-    await expect(this.page.getByRole('dialog')).toContainText(json.data.attributes[field])
-    return response
+    // The handler can see an error while click is still resolving; never leave an unhandled rejection.
+    void failure.catch(() => {})
+    const inChain = (path: string) =>
+      /^\/api\/sales-bc\/v1\/(quotations(?:\/[^/]+\/(send|approve|convert-to-sales-order))?|delivery-notes|sales-orders\/[^/]+\/approve)$/.test(
+        path,
+      )
+    const observe = (response: Response) => {
+      const path = new URL(response.url()).pathname
+      if (response.request().method() !== 'POST' || !inChain(path)) return
+      responses.push(response)
+      if (!response.ok()) rejectFailure(new Error(`Sales create POST ${path} returned ${response.status()}`))
+    }
+    this.page.on('response', observe)
+    const initial = this.page.waitForResponse(
+      (res) => res.request().method() === 'POST' && new URL(res.url()).pathname === '/api/sales-bc/v1/quotations',
+    )
+    void initial.catch(() => {})
+    const operation = (async () => {
+      await this.save(mode)
+      expect((await initial).status()).toBe(201)
+      // Success is the completion barrier, including any PENDING_APPROVAL→approve follow-up.
+      await expect(this.successDialog).toBeVisible()
+      const response = [...responses].reverse().find((res) => {
+        const path = new URL(res.url()).pathname
+        return mode === 'order'
+          ? path.endsWith('/convert-to-sales-order') || /\/sales-orders\/[^/]+\/approve$/.test(path)
+          : path === `/api/sales-bc/v1/${mode === 'delivery' ? 'delivery-notes' : 'quotations'}`
+      })
+      if (!response) throw new Error(`Sales create ${mode}: success dialog without final response`)
+      expect(response.ok()).toBe(true)
+      const json = await response.json()
+      const field = { quotation: 'quotation_number', order: 'so_number', delivery: 'dn_number' }[mode]
+      const number = json.data?.attributes?.[field]
+      if (typeof number !== 'string' || !number.trim()) throw new Error(`Sales create response missing ${field}`)
+      await expect(this.successDialog).toContainText(number)
+      return response
+    })()
+    try {
+      return await Promise.race([operation, failure])
+    } finally {
+      this.page.off('response', observe)
+    }
   }
 }
