@@ -100,20 +100,29 @@ export class SalesFulfillmentScenario {
     await this.api.post(`/sales-bc/v1/quotations/${quote.id}/approve`, {})
     return quote
   }
+  /** erp-api#14: only repeat the first GET after a successful write; never repeat POST. */
+  private async firstRead<T extends object>(read: () => Promise<T>): Promise<T> {
+    let result!: T
+    await expect(async () => {
+      result = await read()
+      expect(result).toBeDefined()
+    }).toPass({ timeout: 10_000 })
+    return result
+  }
   async newOrder(qty: number, unitPrice = 150, discount = 0) {
     const quote = await this.approvedQuotation(qty, unitPrice, discount)
     const converted = await this.api.post<{ data: { id: string } }>(
       `/sales-bc/v1/quotations/${quote.id}/convert-to-sales-order`,
       {},
     )
-    return { id: converted.data.id, ...(await this.order(converted.data.id)) }
+    return { id: converted.data.id, ...(await this.firstRead(() => this.order(converted.data.id))) }
   }
   async draft(order: { id: string; items?: { id: string }[] }, qty: number) {
     const input = this.sales.deliveryInput(order)
     input.items[0]!.qty = qty
     const created = await this.api.create<FulfillmentNote>('/sales-bc/v1/delivery-notes', input)
     this.trackNote(created.id)
-    return created
+    return { id: created.id, ...(await this.firstRead(() => this.note(created.id))) }
   }
   async lots() {
     return this.api.list<{
