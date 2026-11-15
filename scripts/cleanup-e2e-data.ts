@@ -7,11 +7,20 @@
  * ไม่แตะ user e2e.admin / e2e.staff
  */
 import { existsSync, readFileSync } from 'node:fs'
+import { expect } from '@playwright/test'
 import { salesCleanupAction, type SalesCleanupRecord, type SalesResource } from '../src/data/sales-cleanup.ts'
+
+import {
+  purchasingCleanupAction,
+  type PurchasingCleanupRecord,
+  type PurchasingResource,
+} from '../src/data/purchasing-cleanup.ts'
 
 const APPLY = process.argv.includes('--apply')
 
-const TARGETS: { path: string; field: string; document?: SalesResource }[] = [
+const TARGETS: { path: string; field: string; document?: SalesResource | PurchasingResource }[] = [
+  { path: '/inventory-bc/v1/goods-receipts', field: 'remark_th', document: 'goods-receipts' },
+  { path: '/supplier-bc/v1/purchase-orders', field: 'remark_th', document: 'purchase-orders' },
   { path: '/sales-bc/v1/delivery-notes', field: 'remark_th', document: 'delivery-notes' },
   { path: '/sales-bc/v1/sales-orders', field: 'remark_th', document: 'sales-orders' },
   { path: '/sales-bc/v1/quotations', field: 'remark_th', document: 'quotations' },
@@ -47,10 +56,41 @@ const headers = {
 }
 
 let failures = 0
+const receiptDependentOrders = new Set<string>()
+const reversedOrders = new Set<string>()
+
+async function stockIsZero(productId: string) {
+  const query = new URLSearchParams({ product_id: productId, include_zero_qty: 'true', limit: '2000' })
+  const response = await fetch(`${BASE}/api/inventory-bc/v1/stock-balances?${query}`, { headers })
+  if (!response.ok) throw new Error(`stock read failed: ${response.status}`)
+  const payload = await response.json()
+  if (!Array.isArray(payload.data)) throw new Error('stock response has no data array')
+  const data: { attributes: { total_qty: number } }[] = payload.data
+  return data.every((row) => Number(row.attributes.total_qty) === 0)
+}
 
 for (const t of TARGETS) {
+  if (t.document === 'purchase-orders' && APPLY) {
+    for (const id of reversedOrders) {
+      try {
+        await expect
+          .poll(
+            async () => {
+              const response = await fetch(`${BASE}/api${t.path}/${id}`, { headers })
+              if (!response.ok) throw new Error(`PO read failed: ${response.status}`)
+              return (await response.json()).data.attributes.status
+            },
+            { timeout: 10_000 },
+          )
+          .toBe('SENT')
+      } catch {
+        failures += 1
+        console.warn(`✗ PO ${id}: reversal not visible; subsequent actions use current state`)
+      }
+    }
+  }
   const qs = new URLSearchParams({ filter: `${t.field}||$starts||E2E-`, ignore_limit: 'true' })
-  if (t.document === 'sales-orders') qs.set('relations', 'items')
+  if (t.document === 'sales-orders' || t.document === 'purchase-orders') qs.set('relations', 'items')
   const res = await fetch(`${BASE}/api${t.path}?${qs}`, { headers })
   if (!res.ok) {
     failures += 1
@@ -71,8 +111,17 @@ for (const t of TARGETS) {
   const mine = rows
     .filter((r) => ownedKey(r).startsWith('E2E-'))
     .sort((a, b) => Number(b.attributes.type === 'bundle') - Number(a.attributes.type === 'bundle'))
-  const actionFor = (row: (typeof mine)[number]) =>
-    t.document ? salesCleanupAction(t.document, row.attributes as SalesCleanupRecord) : 'delete'
+  if (t.document === 'goods-receipts') {
+    for (const row of mine)
+      if (row.attributes.status === 'SUBMITTED' && row.attributes.po_id)
+        receiptDependentOrders.add(String(row.attributes.po_id))
+  }
+  const actionFor = (row: (typeof mine)[number]) => {
+    if (!APPLY && t.document === 'purchase-orders' && receiptDependentOrders.has(row.id)) return 'defer'
+    if (t.document === 'purchase-orders' || t.document === 'goods-receipts')
+      return purchasingCleanupAction(t.document, row.attributes as PurchasingCleanupRecord)
+    return t.document ? salesCleanupAction(t.document, row.attributes as SalesCleanupRecord) : 'delete'
+  }
   const retained = mine.filter((r) => actionFor(r) === 'retain')
   const active = mine.filter((r) => actionFor(r) !== 'retain')
   const cancelled = retained.filter((r) => r.attributes.status === 'CANCELLED').length
@@ -80,11 +129,32 @@ for (const t of TARGETS) {
   console.log(
     `${t.path}: ${active.length} ${t.document ? 'active ' : ''}E2E record(s)${t.document ? `; ${cancelled} cancelled audit record(s) retained; ${terminal.length} non-cancellable record(s) retained` : ''}${rows.length > mine.length ? ` (ignored ${rows.length - mine.length} non-E2E)` : ''}`,
   )
-  for (const r of terminal)
-    console.log(
-      `  retained: ${ownedKey(r)} (${String(r.attributes.status)}, linked SO: ${Boolean(r.attributes.sales_order_id)})`,
-    )
+  for (const r of terminal) {
+    const relation =
+      t.document === 'purchase-orders'
+        ? 'PO current state / net received guard'
+        : t.document === 'goods-receipts'
+          ? `linked PO: ${String(r.attributes.po_id ?? 'none')}`
+          : `linked SO: ${Boolean(r.attributes.sales_order_id)}`
+    console.log(`  retained: ${ownedKey(r)} (${String(r.attributes.status)}, ${relation})`)
+  }
   for (const r of active) {
+    if (!APPLY && actionFor(r) === 'defer') {
+      console.log(
+        `  deferred: ${ownedKey(r)} (${r.id}); reassess PO state after linked GR cancellation succeeds, no cancellation assumed`,
+      )
+      continue
+    }
+    if (t.path === '/inventory-bc/v1/products') {
+      try {
+        if (APPLY) await expect.poll(() => stockIsZero(r.id), { timeout: 10_000 }).toBe(true)
+        else if (!(await stockIsZero(r.id))) throw new Error('nonzero stock')
+      } catch {
+        failures += 1
+        console.warn(`  ✗ blocked product ${ownedKey(r)}: stock nonzero or unreadable; refusing deletion`)
+        continue
+      }
+    }
     if (!APPLY) {
       console.log(`  - ${ownedKey(r)} (${r.id})`)
       continue
@@ -96,6 +166,8 @@ for (const t of TARGETS) {
       ...(cancel ? { body: JSON.stringify({ cancel_reason: 'E2E- จบการทดสอบ' }) } : {}),
     })
     if (!del.ok) failures += 1
+    if (del.ok && cancel && t.document === 'goods-receipts' && r.attributes.po_id)
+      reversedOrders.add(String(r.attributes.po_id))
     console.log(
       `  ${del.ok ? (cancel ? '✓ cancelled (audit retained)' : '✓ deleted') : `✗ ${del.status}`} ${ownedKey(r)}`,
     )

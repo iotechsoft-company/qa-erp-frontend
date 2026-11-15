@@ -52,7 +52,11 @@ export class DataTable {
 
   async expectPagination(
     emptyText: string,
-    identity?: { endpoint: string; column: string; field: 'code' | 'quotation_number' | 'so_number' | 'dn_number' },
+    identity?: {
+      endpoint: string
+      column: string
+      field: 'code' | 'quotation_number' | 'so_number' | 'dn_number' | 'po_number' | 'grn_number'
+    },
   ) {
     if (!(await this.next.count())) {
       await expect(this.root.getByText(emptyText, { exact: true })).toBeVisible()
@@ -82,6 +86,8 @@ export class DataTable {
           quotation_number?: string
           so_number?: string
           dn_number?: string
+          po_number?: string
+          grn_number?: string
           name: { th: string }
         }
       }[]
