@@ -44,8 +44,17 @@ export class PurchaseCreatePage extends BasePage {
     await this.page.getByRole('option').filter({ hasText: sku }).click()
     await expect(this.itemRow(sku)).toBeVisible()
   }
-  async setLine(sku: string, column: 'จำนวน' | 'ราคาทุน/หน่วย', value: string) {
+  async setLine(sku: string, column: 'จำนวน' | 'ราคาทุน/หน่วย' | 'ส่วนลด', value: string) {
     await (await this.dataTable.cell(this.itemRow(sku), column)).getByRole('textbox').fill(value)
+  }
+  async applyHeaderDiscount(value: string, type: 'amount' | 'percent') {
+    await this.page.getByRole('button', { name: type === 'percent' ? '%' : '฿', exact: true }).click()
+    await this.page.getByPlaceholder('0.00', { exact: true }).fill(value)
+    await this.page.getByRole('button', { name: 'ใช้ส่วนลด', exact: true }).click()
+  }
+  async expectLineTotal(sku: string, amount: number) {
+    const formatted = amount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    await expect(await this.dataTable.cell(this.itemRow(sku), 'รวมเงิน')).toHaveText(`${formatted} ฿`)
   }
   saveButton(mode: 'po' | 'gr') {
     return this.page.getByRole('button', { name: mode === 'po' ? 'บันทึกใบสั่งซื้อ' : 'บันทึกรับเข้าคลังสินค้า', exact: true })

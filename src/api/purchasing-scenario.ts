@@ -1,6 +1,7 @@
 import { buildGoodsReceipt, buildProduct, buildPurchaseOrder, buildSupplier, e2eCode } from '@data/factories'
 import { purchasingCleanupAction } from '@data/purchasing-cleanup'
 import { type ApiClient } from './api-client'
+import { type PurchaseOrderInput } from '@data/factories'
 
 export type PurchaseRecord = {
   status: string
@@ -48,14 +49,14 @@ export class PurchasingScenario {
   get receiptWarehouseLabel() {
     return this.warehouseCode ? `${this.warehouseName} (${this.warehouseCode})` : this.warehouseName
   }
-  orderInput() {
+  orderInput(overrides: Partial<PurchaseOrderInput> = {}) {
     return buildPurchaseOrder(
       { supplier_id: this.supplierId, product_id: this.productId },
-      { remark_th: `${this.marker} จัดซื้ออุปกรณ์สำนักงาน` },
+      { remark_th: `${this.marker} จัดซื้ออุปกรณ์สำนักงาน`, ...overrides },
     )
   }
-  async createOrder(sent = false) {
-    let order = await this.api.create<PurchaseRecord>('/supplier-bc/v1/purchase-orders', this.orderInput())
+  async createOrder(sent = false, overrides: Partial<PurchaseOrderInput> = {}) {
+    let order = await this.api.create<PurchaseRecord>('/supplier-bc/v1/purchase-orders', this.orderInput(overrides))
     if (sent) {
       for (const action of ['approve', 'send']) {
         const json = await this.api.post<{ data: { id: string; attributes: PurchaseRecord } }>(

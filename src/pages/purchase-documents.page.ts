@@ -154,8 +154,10 @@ export class PurchaseDocumentsPage extends BasePage {
     if (index < 0) throw new Error(`Unknown receive column ${column}`)
     return table.locator('tbody').getByRole('row').getByRole('cell').nth(index)
   }
-  async receive(warehouseLabel: string, remark: string, lot: string) {
+  async receive(warehouseLabel: string, remark: string, lot: string, quantity?: number) {
     await new MuiSelect(this.page, this.dialog.getByRole('combobox', { name: 'คลังสินค้าปลายทาง' })).choose(warehouseLabel)
+    if (quantity !== undefined)
+      await (await this.receiptCell('จำนวนรับจริง')).getByRole('spinbutton').fill(String(quantity))
     await this.dialog.getByRole('textbox', { name: 'หมายเหตุการรับเข้า' }).fill(remark)
     await (await this.receiptCell('เลขที่ล็อต (Lot No.)')).getByRole('textbox').fill(lot)
     const result = this.page.waitForResponse(
