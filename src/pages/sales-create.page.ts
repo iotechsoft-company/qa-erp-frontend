@@ -85,12 +85,4 @@ export class SalesCreatePage extends BasePage {
     await expect(this.page.getByRole('dialog')).toContainText(json.data.attributes[field])
     return response
   }
-  async submit(mode: SalesMode) {
-    const resource = mode === 'delivery' ? 'delivery-notes' : 'quotations'
-    const result = this.page.waitForResponse(
-      (res) => new URL(res.url()).pathname === `/api/sales-bc/v1/${resource}` && res.request().method() === 'POST',
-    )
-    await this.save(mode)
-    return result
-  }
 }
