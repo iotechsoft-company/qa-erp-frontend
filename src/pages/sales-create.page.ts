@@ -66,6 +66,25 @@ export class SalesCreatePage extends BasePage {
   async save(mode: SalesMode) {
     await this.saveButton(mode).click()
   }
+  /** Wait for the final operation, including the QT→SO chain, before cleanup may start. */
+  async create(mode: SalesMode) {
+    const result = this.page.waitForResponse((res) => {
+      const path = new URL(res.url()).pathname
+      return (
+        res.request().method() === 'POST' &&
+        (mode === 'order'
+          ? path.endsWith('/convert-to-sales-order')
+          : path === `/api/sales-bc/v1/${mode === 'delivery' ? 'delivery-notes' : 'quotations'}`)
+      )
+    })
+    await this.save(mode)
+    const response = await result
+    expect(response.status()).toBe(201)
+    const json = await response.json()
+    const field = { quotation: 'quotation_number', order: 'so_number', delivery: 'dn_number' }[mode]
+    await expect(this.page.getByRole('dialog')).toContainText(json.data.attributes[field])
+    return response
+  }
   async submit(mode: SalesMode) {
     const resource = mode === 'delivery' ? 'delivery-notes' : 'quotations'
     const result = this.page.waitForResponse(

@@ -1,14 +1,14 @@
 import { SalesScenario } from '@api/sales-scenario'
 import { expect, test } from '@fixtures/test'
-import { expectQuotationTypeBug } from '../helpers/sales-bugs'
+import { OwnedSalesScenario } from '../helpers/owned-sales'
 
 test.describe('Quotations', { tag: ['@sales', '@regression', '@mutation'] }, () => {
   test(
-    'known bug #3: สร้าง QT ถูก reject เพราะ document_type ตัวพิมพ์เล็ก',
+    'UI create QT uses uppercase document type and persists a draft (#3 regression)',
     { annotation: { type: 'issue', description: 'https://github.com/iotechsoft-company/erp-frontend/issues/3' } },
     async ({ allowMutation, api, salesCreatePage }) => {
       void allowMutation
-      const scenario = new SalesScenario(api)
+      const scenario = new OwnedSalesScenario(api)
       try {
         await scenario.seed()
         await salesCreatePage.goto()
@@ -17,7 +17,19 @@ test.describe('Quotations', { tag: ['@sales', '@regression', '@mutation'] }, () 
         await salesCreatePage.addProduct(scenario.sku)
         await salesCreatePage.setLine(scenario.sku, 'ราคาขาย/หน่วย', '100')
         await salesCreatePage.remark.fill(scenario.quotationInput().remark_th)
-        await expectQuotationTypeBug(await salesCreatePage.submit('quotation'))
+        const response = await salesCreatePage.create('quotation')
+        expect(response.request().postDataJSON().document_type).toBe('STANDARD_QUOTATION')
+        const json = await response.json()
+        expect(json.data.attributes).toMatchObject({
+          status: 'DRAFT',
+          customer_id: scenario.customerId,
+          document_type: 'STANDARD_QUOTATION',
+        })
+        const read = await api.get<{ data: { id: string; attributes: { status: string } } }>(
+          `/sales-bc/v1/quotations/${json.data.id}`,
+        )
+        expect(read.data).toMatchObject({ id: json.data.id, attributes: { status: 'DRAFT' } })
+        expect(await scenario.inventory.stockQty()).toBe(1)
       } finally {
         await scenario.cleanup()
       }
