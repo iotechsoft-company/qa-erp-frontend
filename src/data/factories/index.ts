@@ -180,3 +180,5 @@ export const buildUom = (overrides: Partial<UomInput> = {}): UomInput => ({
 export * from './sales'
 
 export * from './purchasing'
+
+export * from './stock'
