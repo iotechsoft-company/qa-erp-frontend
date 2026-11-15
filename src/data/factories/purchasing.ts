@@ -6,6 +6,9 @@ export type PurchaseOrderInput = {
   document_date: string
   expected_date: string
   remark_th: string
+  discount_mode?: 'none' | 'header' | 'per_item' | 'both'
+  discount_type?: 'amount' | 'percent'
+  discount_value?: number
   items: { product_id: string; qty: number; unit_cost: number; discount_type: 'amount' | 'percent'; discount: number }[]
 }
 export const buildPurchaseOrder = (

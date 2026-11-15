@@ -157,8 +157,10 @@ export class PurchaseDocumentsPage extends BasePage {
     await expect(row, 'Receive actions require one identified product row').toHaveCount(1)
     return row.getByRole('cell').nth(index)
   }
-  async receive(warehouseLabel: string, remark: string, lot: string, sku?: string) {
+  async receive(warehouseLabel: string, remark: string, lot: string, quantity?: number, sku?: string) {
     await new MuiSelect(this.page, this.dialog.getByRole('combobox', { name: 'คลังสินค้าปลายทาง' })).choose(warehouseLabel)
+    if (quantity !== undefined)
+      await (await this.receiptCell('จำนวนรับจริง', sku)).getByRole('spinbutton').fill(String(quantity))
     await this.dialog.getByRole('textbox', { name: 'หมายเหตุการรับเข้า' }).fill(remark)
     await (await this.receiptCell('เลขที่ล็อต (Lot No.)', sku)).getByRole('textbox').fill(lot)
     const result = this.page.waitForResponse(
