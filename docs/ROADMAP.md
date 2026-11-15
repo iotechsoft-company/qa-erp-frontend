@@ -79,7 +79,7 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 
 ## Phase 3 — Regression / CRUD (`@mutation`, dev)
 
-- [ ] More factories/contracts/cleanup from `.openapi/*.json`: customer-groups, supplier-groups, brands, item-prices and remaining workflow entities (QT/DN and purchasing PO/GR factories are implemented; SO is created by QT conversion, not direct POST)
+- [ ] More factories from `.openapi/*.json`: customer-groups, supplier-groups, brands, item-prices, quotations, sales-orders (purchasing PO/GR factories are implemented)
 - [x] Extend `scripts/cleanup-e2e-data.ts` TARGETS for new Phase 2 entities: item-groups and uoms (`name_th`, response `name.th`). Extend again when later factories are added.
 
 - [x] Product CRUD and bundle CRUD through UI, with API cleanup
@@ -87,7 +87,7 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 - [ ] Sales flow: quotation → order → delivery note
 - [ ] Purchase flow: PO → goods receipt → stock balance changes — implemented with API GR cancellation workaround for frontend#7, awaiting PR review/merge
 - [x] Inventory required-field validation errors (Thai), including bundles requiring at least one component
-- [ ] Validation errors in remaining modules/flows — customer/supplier required/length/domain validation, Sales customer/date and Purchasing document-date/zero-qty/cancel-reason checks are implemented; see workflow matrix for gaps
+- [ ] Validation errors in other modules
 
 ## Phase 4 — Extras
 
@@ -216,3 +216,12 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 - Full `pnpm test --retries=0 --reporter=list`: exit 0, 117 executions = 112 passed + 5 fixme/skipped cases (existing Sales update x2/race x1 plus Purchasing update x2). No expected-failure markers or retries. Known UI bug characterizations pass while the exact defects exist.
 - Final cleanup dry-run after clearing four owned products left by the early stock-query setup error: 0 active E2E documents, 0 master-data E2E records and 0 non-cancellable remainders. Retained cancelled audits: GR 20, PO 63, DN 13, SO 94, QT 95 (285 total); reversed stock history/zero-quantity lots are retained by the system. This is not zero total audit rows.
 - Purchasing remains unchecked pending review and the stated application gaps. No merge performed.
+
+## PR #3 review revision (2026-11-15)
+
+- Addressed required review findings: bounded read-only PO/stock reversal checks inside scenario cleanup, CLI stock guard (unreadable/nonzero stock blocks product deletion with nonzero exit), completed-GR row assertions, and explicit RECEIVED PO precondition for frontend#7.
+- Also addressed unowned-row skipping, conditional/deferred dry-run PO reporting and purchasing-specific relation labels, Bangkok calendar dates, and row-scoped receipt cells. Added `createReceipt`/`orderStatus` helpers and consolidated Purchasing cleanup action handling.
+- Added a live interrupted-GR cleanup regression and two local CLI transport regressions: failed GR cancellation cannot delete a stocked product even when the transport would allow DELETE; dry-run reports the PO dependency without claiming cancellation. No real ERP data is used by the CLI stub tests.
+- Cross-module Sales/Purchasing cleanup-helper extraction (review suggestion #9) is deferred to a focused follow-up; Purchasing already computes the action once in one helper. Sales transition/ownership behavior is unchanged by this revision.
+- Seed prerequisites now use bounded read-only visibility checks for a newly created product and each PO state transition. No write retries were introduced; draft PUT remains quarantined under api#14.
+- Review validation: affected Purchasing UI/contracts/cleanup/CLI specs with `--repeat-each=2 --retries=0` passed 53 executions with 4 existing PUT fixme executions skipped; no unexpected failures or retries in the final run. Types/lint/formatting passed. Dry-run cleanup: 0 active E2E and 0 master-data leftovers; retained cancelled audits GR 40 / PO 100 / DN 13 / SO 94 / QT 95 (342 total).

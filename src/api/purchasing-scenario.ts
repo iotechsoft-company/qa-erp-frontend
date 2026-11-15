@@ -1,5 +1,6 @@
 import { buildGoodsReceipt, buildProduct, buildPurchaseOrder, buildSupplier, e2eCode } from '@data/factories'
 import { purchasingCleanupAction } from '@data/purchasing-cleanup'
+import { expect } from '@playwright/test'
 import { type ApiClient } from './api-client'
 
 export type PurchaseRecord = {
@@ -41,6 +42,10 @@ export class PurchasingScenario {
     this.productName = input.name_th
     const product = await this.api.create('/inventory-bc/v1/products', input)
     this.productId = product.id
+    await expect(async () => {
+      const visible = await this.api.get<{ data: { id: string } }>(`/inventory-bc/v1/products/${product.id}`)
+      expect(visible.data.id).toBe(product.id)
+    }).toPass({ timeout: 10_000 })
   }
   get createWarehouseLabel() {
     return this.warehouseCode ? `[${this.warehouseCode}] ${this.warehouseName}` : this.warehouseName
@@ -63,6 +68,8 @@ export class PurchasingScenario {
           {},
         )
         order = { id: json.data.id, ...json.data.attributes }
+        const status = action === 'approve' ? 'APPROVED' : 'SENT'
+        await expect.poll(() => this.orderStatus(order.id), { timeout: 10_000 }).toBe(status)
       }
     }
     return order
@@ -80,6 +87,28 @@ export class PurchasingScenario {
       { cancel_reason: `${this.marker} คืนยอดหลังทดสอบ` },
     )
     return { id: json.data.id, ...json.data.attributes }
+  }
+  async createReceipt(order?: { id: string; items?: { id: string }[] }) {
+    return this.api.create<PurchaseRecord>(
+      '/inventory-bc/v1/goods-receipts',
+      this.receiptInput(order ?? (await this.createOrder(true))),
+    )
+  }
+  async orderStatus(id: string) {
+    return (await this.api.get<{ data: { attributes: PurchaseRecord } }>(`/supplier-bc/v1/purchase-orders/${id}`)).data
+      .attributes.status
+  }
+  private async cleanupDocument(
+    resource: 'goods-receipts' | 'purchase-orders',
+    record: PurchaseRecord & { id: string },
+  ) {
+    const action = purchasingCleanupAction(resource, record)
+    const prefix = resource === 'goods-receipts' ? 'inventory-bc' : 'supplier-bc'
+    const path = `/${prefix}/v1/${resource}/${record.id}`
+    if (action === 'delete') await this.api.delete(path)
+    else if (action === 'cancel') await this.api.post(`${path}/cancel`, { cancel_reason: `${this.marker} จบการทดสอบ` })
+    else if (record.status !== 'CANCELLED') console.info(`Retained owned ${resource} ${record.id}: ${record.status}`)
+    return action
   }
   async stockQty(productId = this.productId) {
     const rows = await this.api.list<{ total_qty: number }>('/inventory-bc/v1/stock-balances', {
@@ -103,29 +132,28 @@ export class PurchasingScenario {
         filter: `remark_th||$starts||${this.marker}`,
         ignore_limit: 'true',
       })
+      const reversedOrders = new Set<string>()
       for (const receipt of receipts) {
-        if (!receipt.remark?.th?.startsWith(this.marker)) throw new Error('Unowned receipt')
+        if (!receipt.remark?.th?.startsWith(this.marker)) continue
         await attempt(async () => {
-          const path = `/inventory-bc/v1/goods-receipts/${receipt.id}`
-          if (purchasingCleanupAction('goods-receipts', receipt) === 'delete') await this.api.delete(path)
-          else if (purchasingCleanupAction('goods-receipts', receipt) === 'cancel')
-            await this.api.post(`${path}/cancel`, { cancel_reason: `${this.marker} จบการทดสอบ` })
-          else if (receipt.status !== 'CANCELLED') console.info(`Retained owned GR ${receipt.id}: ${receipt.status}`)
+          const action = await this.cleanupDocument('goods-receipts', receipt)
+          if (action === 'cancel' && receipt.po_id) reversedOrders.add(receipt.po_id)
         })
       }
+      // Read-only polls: cancellation may finish before cross-BC PO synchronization is visible.
+      for (const id of reversedOrders)
+        await attempt(async () => {
+          await expect.poll(() => this.orderStatus(id), { timeout: 10_000 }).toBe('SENT')
+        })
       const orders = await this.api.list<PurchaseRecord>('/supplier-bc/v1/purchase-orders', {
         filter: `remark_th||$starts||${this.marker}`,
         ignore_limit: 'true',
         relations: 'items',
       })
       for (const order of orders) {
-        if (!order.remark?.th?.startsWith(this.marker)) throw new Error('Unowned order')
+        if (!order.remark?.th?.startsWith(this.marker)) continue
         await attempt(async () => {
-          const path = `/supplier-bc/v1/purchase-orders/${order.id}`
-          if (purchasingCleanupAction('purchase-orders', order) === 'delete') await this.api.delete(path)
-          else if (purchasingCleanupAction('purchase-orders', order) === 'cancel')
-            await this.api.post(`${path}/cancel`, { cancel_reason: `${this.marker} จบการทดสอบ` })
-          else if (order.status !== 'CANCELLED') console.info(`Retained owned PO ${order.id}: ${order.status}`)
+          await this.cleanupDocument('purchase-orders', order)
         })
       }
     })
@@ -137,8 +165,12 @@ export class PurchasingScenario {
       })
       for (const product of products) {
         if (product.sku !== this.sku) throw new Error('Unowned product')
-        if ((await this.stockQty(product.id)) !== 0)
-          throw new Error('Owned purchasing stock was not reversed; refusing product deletion')
+        await expect
+          .poll(() => this.stockQty(product.id), {
+            timeout: 10_000,
+            message: 'Owned stock must reverse before product deletion',
+          })
+          .toBe(0)
         await this.api.delete(`/inventory-bc/v1/products/${product.id}`)
       }
     })
