@@ -1,6 +1,6 @@
 import { SalesScenario } from '@api/sales-scenario'
 import { expect, test } from '@fixtures/test'
-import { expectQuotationTypeBug } from '../helpers/sales-bugs'
+import { OwnedSalesScenario } from '../helpers/owned-sales'
 
 test.describe('Sales orders', { tag: ['@sales', '@regression', '@mutation'] }, () => {
   test('quotation ส่ง → อนุมัติ → แปลง SO → อ่าน → ยกเลิก ผ่าน UI', async ({
@@ -46,11 +46,11 @@ test.describe('Sales orders', { tag: ['@sales', '@regression', '@mutation'] }, (
   })
 
   test(
-    'known bug #3: โหมด SO ส่ง document_type ตัวพิมพ์เล็กและถูก reject',
+    'UI create SO completes the approved-QT conversion chain (#3 regression)',
     { annotation: { type: 'issue', description: 'https://github.com/iotechsoft-company/erp-frontend/issues/3' } },
     async ({ allowMutation, api, salesCreatePage }) => {
       void allowMutation
-      const scenario = new SalesScenario(api)
+      const scenario = new OwnedSalesScenario(api)
       try {
         await scenario.seed()
         await salesCreatePage.goto()
@@ -59,7 +59,22 @@ test.describe('Sales orders', { tag: ['@sales', '@regression', '@mutation'] }, (
         await salesCreatePage.addProduct(scenario.sku)
         await salesCreatePage.setLine(scenario.sku, 'ราคาขาย/หน่วย', '100')
         await salesCreatePage.remark.fill(scenario.quotationInput().remark_th)
-        await expectQuotationTypeBug(await salesCreatePage.submit('order'))
+        const response = await salesCreatePage.create('order')
+        const json = await response.json()
+        expect(json.data.attributes).toMatchObject({ status: 'CONFIRMED', customer_id: scenario.customerId })
+        const order = await api.get<{ data: { attributes: { quotation_id: string; status: string } } }>(
+          `/sales-bc/v1/sales-orders/${json.data.id}`,
+        )
+        expect(order.data.attributes.status).toBe('CONFIRMED')
+        const quote = await api.get<{
+          data: { attributes: { document_type: string; status: string; sales_order_id: string } }
+        }>(`/sales-bc/v1/quotations/${order.data.attributes.quotation_id}`)
+        expect(quote.data.attributes).toMatchObject({
+          document_type: 'STANDARD_QUOTATION',
+          status: 'APPROVED',
+          sales_order_id: json.data.id,
+        })
+        expect(await scenario.inventory.stockQty()).toBe(1)
       } finally {
         await scenario.cleanup()
       }
