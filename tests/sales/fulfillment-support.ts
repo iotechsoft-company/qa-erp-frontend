@@ -69,11 +69,12 @@ export async function expectRejection(
   response: { status(): number; json(): Promise<unknown> },
   status: 409,
   detail: string,
-  code: 'CONFLICT' | 409000 = 'CONFLICT',
+  code: 'CONFLICT' | 'INSUFFICIENT_STOCK' = 'CONFLICT',
+  meta?: { product_id: string; warehouse_id: string; requested: number; available: number },
 ) {
   expect(response.status()).toBe(status)
   expect(await response.json()).toMatchObject({
     status: { code: 409000, message: detail },
-    errors: [{ code, detail }],
+    errors: [{ code, detail, ...(meta ? { meta } : {}) }],
   })
 }

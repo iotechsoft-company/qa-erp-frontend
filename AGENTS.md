@@ -119,3 +119,5 @@ mark the spec with `test.fail()` + `annotation: { type: 'issue', description: <u
 
 - Sales confirmation preflights available non-expired stock; a shortage/expired-only case can fail at QT→SO conversion before any DN exists. DN submit also rechecks stock because confirmation does not reserve lots. Credit exposure sums undelivered ex-VAT unit values, rather than the VAT-inclusive SO grand total.
 - DN stock-ledger source_doc_id and Finance sale_id/ref_doc_id identify the DN **item**, not its header. Finance ledger ref_doc_type is DELIVERY_LINE; cancellation deletes COGS/profit records and retains original plus reversing GL journals. Re-read the SO after cancelling DNs before cleanup: PARTIAL/CLOSED may return to CONFIRMED.
+
+- Since erp-api PR #17 (BE-08), inventory stock-shortage errors preserve `errors[].code=INSUFFICIENT_STOCK` and `meta={product_id,warehouse_id,requested,available}` across the RPC hop; the envelope remains HTTP 409 / status.code 409000. Assert this structured code rather than the old numeric errors[].code.

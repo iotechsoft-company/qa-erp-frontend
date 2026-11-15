@@ -284,7 +284,9 @@ test.describe('Sales fulfillment business workflow', { tag: ['@sales', '@regress
         rejected,
         409,
         `Insufficient stock for product '${s.sales.productId}' in warehouse '${s.sales.warehouseId}': requested 1, available 0.`,
-        409000, // Inventory RPC preserves its numeric domain-error code.
+        // erp-api PR #17 (BE-08): retain the structured inventory code/meta through the RPC hop.
+        'INSUFFICIENT_STOCK',
+        { product_id: s.sales.productId, warehouse_id: s.sales.warehouseId, requested: 1, available: 0 },
       )
       expect((await s.note(draft.id)).status).toBe('DRAFT')
       expect(await s.businessSnapshot(order.id)).toEqual(before)

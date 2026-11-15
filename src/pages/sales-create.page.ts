@@ -99,7 +99,7 @@ export class SalesCreatePage extends BasePage {
       await this.save(mode)
       expect((await initial).status()).toBe(201)
       // Success is the completion barrier, including any PENDING_APPROVAL→approve follow-up.
-      await expect(this.successDialog).toBeVisible()
+      await expect(this.successDialog).toBeVisible({ timeout: 30_000 })
       const response = [...responses].reverse().find((res) => {
         const path = new URL(res.url()).pathname
         return mode === 'order'

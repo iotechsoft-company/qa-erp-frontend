@@ -242,7 +242,7 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 
 - [Frontend PR #1](https://github.com/iotechsoft-company/erp-frontend/pull/1) deployed uppercase quotation document_type and the QT send→approve→convert chain for SO/DN creation while P0.2 full-suite verification was running. Replaced the three obsolete frontend#3/#4 bug characterizations with healthy create/read assertions, retaining issue annotations. Other Sales issue characterizations remain unchanged.
 - `SalesCreatePage.create()` waits for the final create/conversion response and success dialog, so cleanup cannot race an in-flight SO conversion. SO verifies its APPROVED uppercase QT; DN verifies real SO/SO-item references and DRAFT status.
-- Migrated cases seed their own supplier/product/GR stock through `OwnedSalesScenario`, verify create does not consume the one owned unit, then clean Sales documents before reversing Purchasing stock. Shared catalogue stock is never mutated.
+- Migrated cases seed their own supplier/product/GR stock through `SalesScenario(api, new OwnedSalesStock(api))`, verify create does not consume the one owned unit, then clean Sales documents before reversing Purchasing stock. Shared catalogue stock is never mutated.
 - Affected three cases repeated twice with retries=0: 7 passed including setup. Types/lint passed with 0 errors/warnings. Integrated suite verification with P0.2 is recorded on the Receiving branch/PR.
 
 ### P0.2 final integrated validation
@@ -252,7 +252,7 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 - Final cleanup dry-run: 0 active E2E documents, 0 master-data leftovers and 0 non-cancellable remainders. Retained cancelled audits: GR 73 / PO 145 / DN 15 / SO 111 / QT 112 = 456 total; lot and ledger history remains.
 - No new app issue was filed: the unrelated full-suite failures were obsolete Sales bug expectations after a deployed fix, migrated in a separate PR rather than skipped. PR #3 fixes were pushed/re-reviewed first and merged by Claude; PR #4 was synced with main using merge to resolve its squash-related conflicts. Receiving, Sales migration and coverage PRs require reviewer action; Codex did not merge any PR.
 
-- Main dependency sync: PR #4 merged as `0737711` and Sales migration PR #5 merged as `316f4cf`; both are now included through merge of origin/main. Receiving subsequently merged as `58a6b44`; current review work is follow-up PR #8 and the separate P0.3 branch below.
+- Main dependency sync: PR #4 merged as `0737711` and Sales migration PR #5 merged as `316f4cf`; both are now included through merge of origin/main. Receiving subsequently merged as `58a6b44`; follow-up PR #8 subsequently merged as `9fe3326`; P0.3 PR #9 remains under review.
 
 ## PR #5 / #6 review follow-ups (2026-11-15)
 
@@ -275,7 +275,7 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 - [ ] FEFO execution (dev currently FIFO): code validates the configured strategy, but a successful FIFO run is not evidence of FEFO. Use an isolated FEFO environment; do not mutate shared settings.
 - [ ] Existing-SO selection in the DN create form, mixed-lot allocation in a single shipment, remaining discount/price-tolerance/rounding cases, permissions and return/period/dependency guards. Full B1–B3 stays unchecked in the matrix.
 
-P0.3 depends on review follow-up PR #8 for owned-stock composition. Prerequisites for linked-DN/credit/shortage cases are seeded through API; submit/approve/cancel/error actions use the UI. No broad expected-failure marker or write retry is introduced. Final focused verification: `pnpm exec playwright test tests/sales/fulfillment.spec.ts tests/api/sales-stock.spec.ts --repeat-each=2 --retries=0` passed all 15 executions including setup (seven new cases twice); no retries/skips/expected failures. Full-suite and cleanup results follow below.
+P0.3 includes review follow-up PR #8 (squash-merged as `9fe3326`) through a merge of origin/main; its PR targets main. Prerequisites for linked-DN/credit/shortage cases are seeded through API; submit/approve/cancel/error actions use the UI. No broad expected-failure marker or write retry is introduced. Final focused verification: `pnpm exec playwright test tests/sales/fulfillment.spec.ts tests/api/sales-stock.spec.ts --repeat-each=2 --retries=0` passed all 15 executions including setup (seven new cases twice); no retries/skips/expected failures. Full-suite and cleanup results follow below.
 
 ### P0.3 final validation
 
@@ -283,3 +283,12 @@ P0.3 depends on review follow-up PR #8 for owned-stock composition. Prerequisite
 - `pnpm check-types && pnpm lint`: 0 errors / 0 warnings. Seven new cases repeated twice passed all 15 executions including setup. Formatting, whitespace and local Markdown links checked.
 - Final `pnpm cleanup:e2e` dry-run: **0 active E2E documents, 0 master-data leftovers, 0 non-cancellable remainders**. Retained cancelled audits: GR 178 / PO 266 / DN 60 / SO 182 / QT 199 = **885 total**; lot/stock-ledger/GL history remains.
 - No new app issue: initial failures were test assumptions about VAT, transition-guard precedence and RPC error envelopes, corrected against backend source and confirmed by repeat/full runs. Configured FIFO passed; FEFO and the remaining matrix gaps are not claimed complete. No PR was merged by Codex.
+
+### PR #9 main sync and review nits
+
+- Merged origin/main at `9fe3326` into codex/sales-fulfillment without rebase/force-push; retained the #9 versions for all four conflicts. The PR now targets main and its diff contains Sales fulfillment plus review nits.
+- Sales create success dialog has an explicit 30-second timeout. ROADMAP now describes SalesScenario with an injected OwnedSalesStock.
+- Dev now implements backend PR #17 (BE-08): the DN shortage regression requires `INSUFFICIENT_STOCK` plus exact product/warehouse/requested/available metadata, keeping HTTP 409/status 409000, exact detail and all no-side-effect assertions. The first resync run's two failures were this intentional contract drift, not new app defects.
+- Final affected run: 13 distinct cases repeated twice, **27 passed including setup**, retries=0, no skips/expected failures. Includes all seven #9 cases, three local Sales-create guards and three live QT/SO/DN create cases. Types/lint/formatting pass.
+- Cleanup dry-run: 0 active E2E documents, 0 master-data leftovers, 0 non-cancellable remainders. Retained audits: GR 229 / PO 318 / DN 85 / SO 219 / QT 244 = 1095, with lot/ledger history retained.
+- The older 12-failure default output manifest belongs to the 20:34 ICT run (six cases repeated twice): mock HTML charset and unnamed-modal locator bugs fixed in #8. Later runs use separate output directories; the final resync manifest is passed with zero failed tests. The explanation and current results are reported in PR #9.
