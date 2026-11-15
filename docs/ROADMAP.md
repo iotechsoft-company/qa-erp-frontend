@@ -1,5 +1,59 @@
 # Roadmap / TODO for next agent
 
+## Business workflow priorities (2026-11-15)
+
+Coverage source of truth: [Business workflow matrix](WORKFLOW_COVERAGE.md), เทียบ [คู่มือระบบ](https://iots1.github.io/plan-erp/api-workflow-guide.html) กับ spec ที่ commit `a6d746a` รวม Purchasing ใน PR #3 ที่ยังไม่ merge ณ วันที่ตรวจ ครบ 25 รหัสหลักและหัวข้อย่อยในเนื้อหา รวม C9, A3.1, B5.1, E2.1, E2 P6 และ E3.1–E3.2; ตัวเลข 21/23 flows หน้าแรกไม่ใช้เป็น denominator
+
+**สถานะรวม: ยังไม่ครบ business workflow ทั้งระบบ** ไม่มี flow หลักใดที่ยืนยันครบทุกทางเลือก สิทธิ์ และผล stock/บัญชีตามคู่มือแล้ว การติ๊ก Phase 2 หมายถึงขอบเขตหน้า/POM/CRUD ที่ระบุเท่านั้น ไม่ใช่ business flow ทั้งสาย ผลรันตามวันที่ด้านล่างเป็นประวัติ ไม่ได้รัน suite ใหม่ในการอัปเดตเอกสารนี้
+
+| สถานะ             | ขอบเขตปัจจุบัน                                                                                                                                                                                                 |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ทำแล้วในขอบเขตที่ระบุ | Inventory/party UI CRUD และ Thai validation; QT ที่ seed ผ่าน API→UI send/approve/convert SO/cancel; PO UI create/approve/send/cancel; GR UI receive พร้อม stock assertions และ **API cancellation workaround** |
+| บางส่วน + บั๊กขวาง   | A1 tree/optional parent: api#13/#15; A2–A3 draft edit/delete/cancel และ PUT: frontend#6/#7, api#14; B1–B3 create/search/draft controls และ PUT: frontend#2–#5, api#14                                       |
+| ยังขาดทั้ง workflow  | A3.1 barcode, A4 returns, A5 AP; B4 returns, B5/B5.1 POS; C1–C10 finance; D1–D2 stock operations; E2/E3 และหัวข้อย่อย                                                                                          |
+| ยังขาดบางส่วน       | A1 masters/settings/integrity; A2–A3 partial/over receipt/guards; B1–B3 submitted DN/stock/COGS และ credit approval; E1 reports (มีเพียง stock-balance assertions ใน GR); role permissions และ cancel ทั้งสาย   |
+
+Issue ที่อ้างในตารางทั้งหมดตรวจ GitHub แล้วยัง OPEN เมื่อ 2026-11-15 ลิงก์และหลักฐานอยู่ใน Known app bugs และ matrix; “ยังขาด” ไม่ได้หมายความว่าพบบั๊ก ส่วน bug characterization ที่ผ่านหรือ fixme ที่ข้ามไม่นับว่า healthy workflow ผ่าน
+
+### ลำดับงานถัดไป
+
+ลำดับนี้เน้นความถูกต้องของ stock/เงินและ dependency ก่อนเพิ่มความกว้างของหน้า แต่ละงานใช้ branch/PR ตาม module และเพิ่ม owned factories/contracts/cleanup ก่อน mutation ทุกครั้ง งานที่รอแก้แอปแยกจากงานที่เริ่มได้ทันที
+
+| ลำดับ | งาน / flow                                                                                                                         | เริ่มได้เมื่อ / หลักฐานที่ต้องได้ก่อนปิด                                                                                                                                                                          |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P0.1 | Review/แก้ข้อเสนอแนะ Purchasing PR #3 และติดตาม api#14/#15, frontend#2–#7; api#13 optional parent                                     | แก้ตาม review บน branch เดิม; เมื่อแอปแก้แล้วเปลี่ยนเฉพาะ characterization เป็น healthy assertions และเปิด PUT/race ตามหลักฐาน ไม่ retry writes; ต้อง rerun affected specs ซ้ำและ cleanup ก่อนปิด blocker             |
+| P0.2 | เติม A2–A3 ที่ไม่ถูกบล็อก: partial/multiple receipts, over-receipt, qty/totals/discount modes, PO/GR states และ Lot/ledger/PO quantities | เริ่มได้โดยไม่รอ UI draft controls; assert baseline→submit→cancel ของ owned stock และ exact rejection/no side effects; เรียก API แทน UI ต้องระบุ scope                                                       |
+| P0.3 | B1–B3 healthy QT→SO→submitted DN→stock reversal/COGS/profit                                                                        | API contract เริ่มได้ด้วย owned stock; full UI รอ frontend#2–#5; cover credit approval, partial→closed, FIFO/FEFO, shortages และ source totals; ใช้ D1 MATERIAL_RECEIPT fixture เมื่อมี contracts/cleanup แล้ว |
+| P1.1 | D1 ทั้ง 4 entry types และ D2 counted stock/approval/reversal                                                                         | ทำ owned stock fixture ให้ reusable ก่อน; assert qty/cost conservation/ledger, pending approval ไม่มีผล, invalid transitions และ cancel guards; หลีกเลี่ยงแก้ shared settings เพื่อบังคับ threshold               |
+| P1.2 | A4 supplier returns และ B4 customer returns                                                                                        | ต่อจาก submitted GR/DN ที่มี baseline assertions; assert original lot/cost, net qty/status, over-return/consumed-stock guards และ reversal                                                                |
+| P1.3 | A5 AP invoice/CREDIT_NOTE และ C1–C2 receipt/CN/DN                                                                                  | ต่อจาก GR/DN; เพิ่ม finance factories/cleanup; assert 3-way match, tax/rounding, AR/AP, balanced GL และ reversal ก่อนต่อ payments                                                                          |
+| P1.4 | C3–C5 billing/payment/schedules และ C10 credit/refund                                                                              | ต่อจาก issued receipt/submitted AP; partial/full/over-allocation, FX/withholding, outstanding balance/GL และยกเลิกย้อน dependency                                                                        |
+| P1.5 | Cancel ทั้งสาย + permission matrix ของ flow ที่เพิ่ม                                                                                     | ทำควบคู่ P0–P1; Sales/Purchase/Warehouse ย้อนปลายน้ำ→ต้นน้ำ, wrong order ไม่มีผลข้างเคียง, DRAFT child guards; staff roles/menu/button/403 และแยก storage state                                                 |
+| P2.1 | B5 POS และ B5.1 held/complete/resolve                                                                                              | ต่อจาก stock+receipt/payment primitives; cover sale/void ทั้ง stock/finance, payment/discount/VAT และ double completion; recovery/fault injection ใช้ env ควบคุมได้                                         |
+| P2.2 | A3.1 barcode/UOM และ A1 masters/settings ที่เหลือ                                                                                     | Barcode/conversion factories ก่อน scanner scenarios; parallel module PRs สำหรับ groups/brands/prices/variants/history/attachments; settings mutations ที่เป็น global ใช้ isolated env                       |
+| P2.3 | E1–E2 reports/P6, C7 aging, C8 VAT และ E2.1 financial statements                                                                   | ต่อจาก owned source documents; UI filters/export พร้อมยอดตรง source/GL, freshness/rollup และ cancellation; read-only UI smoke เริ่มได้ก่อน แต่ไม่นับว่า reconciliation เสร็จ                                     |
+| P2.4 | E3.1 typed print และ E3.2 template/render                                                                                          | PDF content/totals/locale/company/branch, permissions, print snapshots/history/copy numbering; เพิ่ม presigned attachment/image flow ใน A1                                                              |
+| P3   | C6 close-period/FX และ C9 settings audit พร้อม frozen-period guards ทุกโมดูล                                                          | เตรียม disposable isolated env ก่อน irreversible close/global setting changes; assert FX revaluation/auto-reverse/rollback และ audit old/new/no-op; read-only logs เริ่มได้ก่อน                             |
+
+### Backlog checklist ตาม business flow
+
+รายการเหล่านี้ยังไม่ติ๊กแม้มีบางขั้นแล้ว ดูขอบเขตทำแล้ว/ขาด/บั๊กเป็นราย flow ใน matrix
+
+- [x] ทำ coverage inventory เทียบทุก flow/หัวข้อย่อยของคู่มือ พร้อม spec evidence และ blocker mapping
+- [ ] A1 master/settings ครบ §09 รวม integrity, variants, UOM/barcode, prices, histories และ uploads
+- [ ] A2–A3 PO/GR ครบ lifecycle/partial/guards และ full UI หลังแก้บั๊ก
+- [ ] A3.1 barcode receiving และ pack conversions
+- [ ] A4 purchase returns และ A5 AP invoice/credit note
+- [ ] B1–B3 QT→SO→DN ครบ UI/stock/credit/COGS/reversal หลังแก้บั๊ก
+- [ ] B4 sales returns; B5 POS immediate; B5.1 held/complete/recovery
+- [ ] C1–C2 receipts/tax invoices/CN/DN; C3 billing; C4 payment; C5 schedules
+- [ ] C6 period close/FX; C7 aging; C8 VAT; C9 settings audits; C10 credit/refund
+- [ ] D1 stock entries ทั้ง 4 แบบ; D2 adjustment/approval
+- [ ] E1 stock reports; E2 accounting/profit/P6; E2.1 statements; E3.1/E3.2 print
+- [ ] Cross-flow permissions, cancellation dependency, immutable/DRAFT guards และ stock/GL reconciliation
+
+## Historical implementation and verification
+
 Scaffold status (2026-11-13): config, auth setup, login specs, private-route smoke, products stub.
 Verified: full suite green against BASE_URL with superadmin (29 passed, 1 fixme skipped).
 Gotchas: Next.js route announcer has `role="alert"` → use `BasePage.alert`, not `getByRole('alert')`.
@@ -25,7 +79,7 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 
 ## Phase 3 — Regression / CRUD (`@mutation`, dev)
 
-- [ ] More factories from `.openapi/*.json`: customer-groups, supplier-groups, brands, item-prices, quotations, sales-orders (purchasing PO/GR factories are implemented)
+- [ ] More factories/contracts/cleanup from `.openapi/*.json`: customer-groups, supplier-groups, brands, item-prices and remaining workflow entities (QT/DN and purchasing PO/GR factories are implemented; SO is created by QT conversion, not direct POST)
 - [x] Extend `scripts/cleanup-e2e-data.ts` TARGETS for new Phase 2 entities: item-groups and uoms (`name_th`, response `name.th`). Extend again when later factories are added.
 
 - [x] Product CRUD and bundle CRUD through UI, with API cleanup
@@ -33,7 +87,7 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 - [ ] Sales flow: quotation → order → delivery note
 - [ ] Purchase flow: PO → goods receipt → stock balance changes — implemented with API GR cancellation workaround for frontend#7, awaiting PR review/merge
 - [x] Inventory required-field validation errors (Thai), including bundles requiring at least one component
-- [ ] Validation errors in other modules
+- [ ] Validation errors in remaining modules/flows — customer/supplier required/length/domain validation, Sales customer/date and Purchasing document-date/zero-qty/cancel-reason checks are implemented; see workflow matrix for gaps
 
 ## Phase 4 — Extras
 
