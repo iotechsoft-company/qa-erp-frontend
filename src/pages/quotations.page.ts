@@ -21,6 +21,15 @@ export class QuotationsPage extends SalesDocumentListPage {
   async approve(number: string) {
     return this.action(number, 'อนุมัติ', 'approve')
   }
+  async attemptConvert(number: string, id: string) {
+    const result = this.page.waitForResponse(
+      (res) =>
+        new URL(res.url()).pathname === `/api/sales-bc/v1/quotations/${id}/convert-to-sales-order` &&
+        res.request().method() === 'POST',
+    )
+    await this.dataTable.row(number).getByRole('button', { name: 'สร้าง SO', exact: true }).click()
+    return result
+  }
   async convert(number: string) {
     return this.action(number, 'สร้าง SO', 'convert-to-sales-order')
   }

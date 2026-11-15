@@ -2,7 +2,7 @@ import { buildCustomer, buildDeliveryNote, buildQuotation, e2eCode } from '@data
 import { salesCleanupAction, type SalesResource } from '@data/sales-cleanup'
 import { type ApiClient } from './api-client'
 
-type SalesRecord = {
+export type SalesRecord = {
   status: string
   remark?: { th?: string }
   quotation_number?: string
@@ -145,7 +145,13 @@ export class SalesScenario {
             ignore_limit: 'true',
           })
           for (const note of notes) await attempt(() => this.cleanupDocument('delivery-notes', note))
-          await attempt(() => this.cleanupDocument('sales-orders', order))
+          await attempt(async () => {
+            const fresh = await this.api.get<{ data: { id: string; attributes: SalesRecord } }>(
+              `/sales-bc/v1/sales-orders/${order.id}`,
+              { relations: 'items' },
+            )
+            await this.cleanupDocument('sales-orders', { id: fresh.data.id, ...fresh.data.attributes })
+          })
         }
         // SO cancellation clears quotation.sales_order_id. Do not act on the pre-cancellation snapshot.
         await attempt(async () => {

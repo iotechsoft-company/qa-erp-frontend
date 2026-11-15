@@ -28,7 +28,14 @@ export type GoodsReceiptInput = {
   warehouse_id: string
   document_date: string
   remark_th: string
-  items: { product_id: string; po_item_id: string; qty: number; import_cost: number; lot_number: string }[]
+  items: {
+    product_id: string
+    po_item_id: string
+    qty: number
+    import_cost: number
+    lot_number: string
+    expiry_date?: string | null
+  }[]
 }
 export const buildGoodsReceipt = (
   refs: { po_id: string; warehouse_id: string; product_id: string; po_item_id: string },

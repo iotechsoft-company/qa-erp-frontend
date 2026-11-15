@@ -32,6 +32,16 @@ export class DeliveryNotesPage extends SalesDocumentListPage {
     expect((await result).ok()).toBe(true)
     await expect(this.details).toBeHidden()
   }
+  /** Attempt through the UI, preserving an expected domain-error response for guard assertions. */
+  async attemptSubmit(number: string, id: string) {
+    const result = this.page.waitForResponse(
+      (res) =>
+        new URL(res.url()).pathname === `/api/sales-bc/v1/delivery-notes/${id}/submit` &&
+        res.request().method() === 'POST',
+    )
+    await this.dataTable.row(number).getByRole('button', { name: 'ยืนยันส่ง', exact: true }).click()
+    return result
+  }
   async submit(number: string) {
     return this.action(number, 'ยืนยันส่ง', 'submit')
   }
