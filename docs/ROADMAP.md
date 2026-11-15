@@ -106,8 +106,8 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 - [erp-api#15](https://github.com/iotechsoft-company/erp-api/issues/15) — concurrent item-group writes return 500/40P01 deadlock; repro retained as fixme because the failure is intermittent (2/3 initially; 1/10 after awaiting all writes before cleanup).
 
 - [erp-frontend#2](https://github.com/iotechsoft-company/erp-frontend/issues/2) — QT/SO/DN searches send unsupported `$contL` JSON search operator (400).
-- [erp-frontend#3](https://github.com/iotechsoft-company/erp-frontend/issues/3) — QT/SO creation sends lowercase quotation document_type (400).
-- [erp-frontend#4](https://github.com/iotechsoft-company/erp-frontend/issues/4) — DN form sends customer/product IDs instead of SO/SO-item IDs.
+- [erp-frontend#3](https://github.com/iotechsoft-company/erp-frontend/issues/3) — uppercase document_type fix deployed in erp-frontend PR #1; healthy QT/SO create regressions pass (issue metadata still OPEN when checked).
+- [erp-frontend#4](https://github.com/iotechsoft-company/erp-frontend/issues/4) — real SO/SO-item mapping fix deployed in erp-frontend PR #1; healthy draft DN regression passes (issue metadata still OPEN when checked).
 - [erp-frontend#5](https://github.com/iotechsoft-company/erp-frontend/issues/5) — QT/DN draft edit/delete UI is absent although their API supports draft CRUD.
 - [erp-frontend#6](https://github.com/iotechsoft-company/erp-frontend/issues/6) — purchasing draft PO/GR edit/delete UI absent; API draft CRUD supported.
 - [erp-frontend#7](https://github.com/iotechsoft-company/erp-frontend/issues/7) — submitted GR cancel hidden by RECEIVED PO status; API cancellation reverses stock correctly.
@@ -225,3 +225,10 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 - Cross-module Sales/Purchasing cleanup-helper extraction (review suggestion #9) is deferred to a focused follow-up; Purchasing already computes the action once in one helper. Sales transition/ownership behavior is unchanged by this revision.
 - Seed prerequisites now use bounded read-only visibility checks for a newly created product and each PO state transition. No write retries were introduced; draft PUT remains quarantined under api#14.
 - Review validation: affected Purchasing UI/contracts/cleanup/CLI specs with `--repeat-each=2 --retries=0` passed 53 executions with 4 existing PUT fixme executions skipped; no unexpected failures or retries in the final run. Types/lint/formatting passed. Dry-run cleanup: 0 active E2E and 0 master-data leftovers; retained cancelled audits GR 40 / PO 100 / DN 13 / SO 94 / QT 95 (342 total).
+
+## Sales create migration after frontend PR #1 (2026-11-15)
+
+- Frontend PR #1 deployed uppercase quotation document_type and the QT send→approve→convert chain for SO/DN creation while P0.2 full-suite verification was running. Replaced the three obsolete frontend#3/#4 bug characterizations with healthy create/read assertions, retaining issue annotations. Other Sales issue characterizations remain unchanged.
+- `SalesCreatePage.create()` waits for the final create/conversion response and success dialog, so cleanup cannot race an in-flight SO conversion. SO verifies its APPROVED uppercase QT; DN verifies real SO/SO-item references and DRAFT status.
+- Migrated cases seed their own supplier/product/GR stock through `OwnedSalesScenario`, verify create does not consume the one owned unit, then clean Sales documents before reversing Purchasing stock. Shared catalogue stock is never mutated.
+- Affected three cases repeated twice with retries=0: 7 passed including setup. Types/lint passed with 0 errors/warnings. Integrated suite verification with P0.2 is recorded on the Receiving branch/PR.

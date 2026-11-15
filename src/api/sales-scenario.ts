@@ -23,7 +23,7 @@ export class SalesScenario {
   warehouseName = ''
   constructor(readonly api: ApiClient) {}
 
-  async seed() {
+  private async catalogueStock() {
     const balances = await this.api.list<{
       product_id: string
       warehouse_id?: string
@@ -42,6 +42,10 @@ export class SalesScenario {
       throw new Error(
         'Sales fixture needs an existing catalogue product with at least 2 available units and a warehouse ID',
       )
+    return { product_id: stocked.product_id, product_sku: stocked.product_sku!, warehouse_id: stocked.warehouse_id! }
+  }
+  async seed(reference?: { product_id: string; product_sku: string; warehouse_id: string }) {
+    const stocked = reference ?? (await this.catalogueStock())
     this.productId = stocked.product_id
     this.sku = stocked.product_sku!
     this.warehouseId = stocked.warehouse_id!

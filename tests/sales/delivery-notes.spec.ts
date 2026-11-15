@@ -1,5 +1,6 @@
 import { SalesScenario } from '@api/sales-scenario'
 import { expect, test } from '@fixtures/test'
+import { OwnedSalesScenario } from '../helpers/owned-sales'
 
 test.describe('Delivery notes', { tag: ['@sales', '@regression', '@mutation'] }, () => {
   test('อ่านร่างและ validate เหตุผลยกเลิก ก่อนยกเลิกผ่าน UI', async ({ allowMutation, api, deliveryNotesPage }) => {
@@ -32,32 +33,41 @@ test.describe('Delivery notes', { tag: ['@sales', '@regression', '@mutation'] },
   })
 
   test(
-    'known bug #4: DN ส่ง customer/product IDs แล้วหา SO ไม่พบ',
+    'UI create draft DN maps real SO and SO-item IDs (#4 regression)',
     { annotation: { type: 'issue', description: 'https://github.com/iotechsoft-company/erp-frontend/issues/4' } },
     async ({ allowMutation, api, salesCreatePage }) => {
       void allowMutation
-      const scenario = new SalesScenario(api)
+      const scenario = new OwnedSalesScenario(api)
       try {
         await scenario.seed()
-        const order = await scenario.createOrder()
         await salesCreatePage.goto()
         await salesCreatePage.selectMode('delivery')
         await salesCreatePage.selectCustomer(scenario.customer.code)
         await salesCreatePage.selectWarehouse(scenario.warehouseName)
         await salesCreatePage.addProduct(scenario.sku)
         await salesCreatePage.remark.fill(`${scenario.marker} จัดส่งสินค้าสำนักงาน`)
-        const response = await salesCreatePage.submit('delivery')
-        expect(response.request().postDataJSON()).toMatchObject({
-          so_id: scenario.customerId,
-          items: [{ so_item_id: scenario.productId, qty: 1 }],
-        })
-        expect(scenario.customerId).not.toBe(order.id)
-        expect(scenario.productId).not.toBe(order.items![0]!.id)
-        expect(response.status()).toBe(404)
-        const body = await response.json()
-        expect(body.errors).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'NOT_FOUND' })]))
-        expect(body.status.message).toContain(scenario.customerId)
-        expect(body.status.message).toMatch(/sales.orders.*not found/i)
+        const response = await salesCreatePage.create('delivery')
+        const payload = response.request().postDataJSON()
+        const json = await response.json()
+        expect(json.data.attributes).toMatchObject({ status: 'DRAFT', so_id: payload.so_id })
+        expect(payload.so_id).not.toBe(scenario.customerId)
+        expect(payload.items).toHaveLength(1)
+        expect(payload.items[0].so_item_id).not.toBe(scenario.productId)
+        const order = await api.get<{
+          data: {
+            id: string
+            attributes: { status: string; customer_id: string; items: { id: string; product_id: string }[] }
+          }
+        }>(`/sales-bc/v1/sales-orders/${payload.so_id}`, { relations: 'items' })
+        expect(order.data.attributes).toMatchObject({ status: 'CONFIRMED', customer_id: scenario.customerId })
+        expect(order.data.attributes.items).toEqual([
+          expect.objectContaining({ id: payload.items[0].so_item_id, product_id: scenario.productId }),
+        ])
+        const read = await api.get<{ data: { attributes: { status: string; so_id: string } } }>(
+          `/sales-bc/v1/delivery-notes/${json.data.id}`,
+        )
+        expect(read.data.attributes).toMatchObject({ status: 'DRAFT', so_id: order.data.id })
+        expect(await scenario.inventory.stockQty()).toBe(1)
       } finally {
         await scenario.cleanup()
       }
