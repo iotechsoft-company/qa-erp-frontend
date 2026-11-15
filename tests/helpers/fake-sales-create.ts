@@ -27,7 +27,7 @@ export async function fakeSalesCreate(mode: 'qt-reject' | 'pending-approval' | '
           await post('quotations/local-qt/convert-to-sales-order');
           await post('sales-orders/local-so/approve');
         }
-        const modal = document.createElement('div'); modal.setAttribute('role','dialog');modal.setAttribute('aria-label','ทำรายการขายสำเร็จ');
+        const modal = document.createElement('div'); modal.setAttribute('role','dialog');
         modal.innerHTML = '<h3>ทำรายการขายสำเร็จ</h3>'; modal.append(document.createTextNode(kind === 'order' ? 'SO-LOCAL' : 'QT-LOCAL')); document.body.append(modal);
       }
       </script>`)

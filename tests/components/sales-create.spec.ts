@@ -13,7 +13,7 @@ test.describe('Sales create POM transport safety', { tag: ['@sales', '@regressio
     }
   })
 
-  test('waits for follow-up SO approval and the named success dialog', async ({ page, salesCreatePage }) => {
+  test('waits for follow-up SO approval and the success-heading dialog', async ({ page, salesCreatePage }) => {
     const server = await fakeSalesCreate('pending-approval')
     try {
       await page.goto(server.url)
