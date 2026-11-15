@@ -50,6 +50,7 @@ export class StockScenario {
   readonly marker = e2eCode('STOCK')
   readonly inventory: PurchasingScenario
   secondProductId = ''
+  private secondSku = ''
   destinationWarehouseId = ''
   constructor(readonly api: ApiClient) {
     this.inventory = new PurchasingScenario(api)
@@ -73,6 +74,7 @@ export class StockScenario {
       item_group_id: await this.api.firstId('/inventory-bc/v1/item-groups', { filter: 'is_group||$eq||false' }),
       stock_uom_id: await this.api.firstId('/inventory-bc/v1/uoms'),
     })
+    this.secondSku = input.sku!
     const created = await this.api.create('/inventory-bc/v1/products', input)
     this.secondProductId = created.id
   }
@@ -244,7 +246,7 @@ export class StockScenario {
           const action = stockCleanupAction(record)
           if (action === 'delete') await this.api.delete(`/inventory-bc/v1/${resource}/${record.id}`)
           else if (action !== 'retain') {
-            // Pending cancellation is verified separately; approval then reversal is owned-stock-only cleanup.
+            // erp-api#18: pending cancel is broken; approve then reverse owned stock only.
             if (action === 'approve-cancel') await this.action(resource, record.id, 'approve')
             await this.action(resource, record.id, 'cancel')
             await expect
@@ -254,13 +256,16 @@ export class StockScenario {
         })
     })
     await attempt(async () => {
-      if (!this.secondProductId) return
-      const product = await this.api.get<{ data: { attributes: { sku: string } } }>(
-        `/inventory-bc/v1/products/${this.secondProductId}`,
-      )
-      if (!product.data.attributes.sku.startsWith('E2E-')) throw new Error('Unowned repack product')
-      await expect.poll(() => this.inventory.stockQty(this.secondProductId), { timeout: 10_000 }).toBe(0)
-      await this.api.delete(`/inventory-bc/v1/products/${this.secondProductId}`)
+      if (!this.secondSku.startsWith('E2E-')) return
+      const products = await this.api.list<{ sku: string }>('/inventory-bc/v1/products', {
+        filter: `sku||$eq||${this.secondSku}`,
+        ignore_limit: 'true',
+      })
+      for (const product of products) {
+        if (product.sku !== this.secondSku) throw new Error('Unowned repack product')
+        await expect.poll(() => this.inventory.stockQty(product.id), { timeout: 10_000 }).toBe(0)
+        await this.api.delete(`/inventory-bc/v1/products/${product.id}`)
+      }
     })
     await attempt(() => this.inventory.cleanup())
     if (errors.length) throw new AggregateError(errors, 'Stock cleanup failed')

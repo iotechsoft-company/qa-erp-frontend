@@ -16,20 +16,30 @@ import {
   type PurchasingResource,
 } from '../src/data/purchasing-cleanup.ts'
 
+import {
+  stockCleanupAction,
+  stockPostingTime,
+  type StockResource,
+  type StockCleanupRecord,
+} from '../src/data/stock-cleanup.ts'
+
 const APPLY = process.argv.includes('--apply')
 
-const TARGETS: { path: string; field: string; document?: SalesResource | PurchasingResource }[] = [
-  { path: '/inventory-bc/v1/goods-receipts', field: 'remark_th', document: 'goods-receipts' },
-  { path: '/supplier-bc/v1/purchase-orders', field: 'remark_th', document: 'purchase-orders' },
-  { path: '/sales-bc/v1/delivery-notes', field: 'remark_th', document: 'delivery-notes' },
-  { path: '/sales-bc/v1/sales-orders', field: 'remark_th', document: 'sales-orders' },
-  { path: '/sales-bc/v1/quotations', field: 'remark_th', document: 'quotations' },
-  { path: '/sales-bc/v1/customers', field: 'code' },
-  { path: '/supplier-bc/v1/suppliers', field: 'code' },
-  { path: '/inventory-bc/v1/products', field: 'sku' },
-  { path: '/inventory-bc/v1/item-groups', field: 'name_th' },
-  { path: '/inventory-bc/v1/uoms', field: 'name_th' },
-]
+const TARGETS: { path: string; field: string; document?: SalesResource | PurchasingResource; stock?: StockResource }[] =
+  [
+    { path: '/inventory-bc/v1/goods-receipts', field: 'remark_th', document: 'goods-receipts' },
+    { path: '/supplier-bc/v1/purchase-orders', field: 'remark_th', document: 'purchase-orders' },
+    { path: '/sales-bc/v1/delivery-notes', field: 'remark_th', document: 'delivery-notes' },
+    { path: '/sales-bc/v1/sales-orders', field: 'remark_th', document: 'sales-orders' },
+    { path: '/sales-bc/v1/quotations', field: 'remark_th', document: 'quotations' },
+    { path: '/inventory-bc/v1/stock-entries', field: 'remark_th', stock: 'stock-entries' },
+    { path: '/inventory-bc/v1/stock-adjustments', field: 'remark_th', stock: 'stock-adjustments' },
+    { path: '/sales-bc/v1/customers', field: 'code' },
+    { path: '/supplier-bc/v1/suppliers', field: 'code' },
+    { path: '/inventory-bc/v1/products', field: 'sku' },
+    { path: '/inventory-bc/v1/item-groups', field: 'name_th' },
+    { path: '/inventory-bc/v1/uoms', field: 'name_th' },
+  ]
 
 const env: Record<string, string> = existsSync('.env')
   ? Object.fromEntries(
@@ -69,7 +79,70 @@ async function stockIsZero(productId: string) {
   return data.every((row) => Number(row.attributes.total_qty) === 0)
 }
 
+async function cleanupStockDocuments() {
+  // D1/D2 can depend on each other: reverse the last effective posting first across both resources.
+  const stockDocuments: (StockCleanupRecord & { id: string; resource: StockResource })[] = []
+  for (const target of TARGETS.filter((t) => t.stock)) {
+    const query = new URLSearchParams({ filter: 'remark_th||$starts||E2E-', ignore_limit: 'true' })
+    const response = await fetch(`${BASE}/api${target.path}?${query}`, { headers })
+    if (!response.ok) {
+      failures++
+      console.warn(`✗ ${target.path}: ${response.status}`)
+      continue
+    }
+    const rows: { id: string; attributes: StockCleanupRecord }[] = (await response.json()).data ?? []
+    const mine = rows.filter((row) => row.attributes.remark?.th?.startsWith('E2E-'))
+    console.log(
+      `${target.path}: ${mine.filter((row) => stockCleanupAction(row.attributes) !== 'retain').length} active E2E record(s); ${mine.filter((row) => row.attributes.status === 'CANCELLED').length} cancelled audit record(s) retained`,
+    )
+    stockDocuments.push(...mine.map((row) => ({ id: row.id, ...row.attributes, resource: target.stock! })))
+  }
+  for (const record of stockDocuments.sort((a, b) => stockPostingTime(b) - stockPostingTime(a))) {
+    const action = stockCleanupAction(record)
+    if (action === 'retain') continue
+    if (!APPLY) {
+      console.log(`  - ${record.remark?.th} (${record.status}; ${action})`)
+      continue
+    }
+    try {
+      const path = `${BASE}/api/inventory-bc/v1/${record.resource}/${record.id}`
+      const write = async (suffix: string, method: string) => {
+        const response = await fetch(`${path}${suffix}`, {
+          method,
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          ...(method === 'POST' ? { body: JSON.stringify({ cancel_reason: 'E2E- จบการทดสอบ' }) } : {}),
+        })
+        if (!response.ok) throw new Error(`${method} ${record.resource}/${suffix}: ${response.status}`)
+      }
+      if (action === 'delete') await write('', 'DELETE')
+      else {
+        // erp-api#18: cancelling a held adjustment is broken. Owned E2E stock only: approve then reverse.
+        if (action === 'approve-cancel') await write('/approve', 'POST')
+        await write('/cancel', 'POST')
+        await expect
+          .poll(
+            async () => {
+              const res = await fetch(path, { headers })
+              if (!res.ok) throw new Error(`stock read: ${res.status}`)
+              return (await res.json()).data.attributes.status
+            },
+            { timeout: 10_000 },
+          )
+          .toBe('CANCELLED')
+      }
+      console.log(`  ✓ ${action}: ${record.remark?.th}`)
+    } catch (error) {
+      failures++
+      console.warn(`✗ stock cleanup ${record.id}: ${String(error)}`)
+    }
+  }
+}
+
 for (const t of TARGETS) {
+  if (t.stock) {
+    if (t.stock === 'stock-entries') await cleanupStockDocuments()
+    continue
+  }
   if (t.document === 'purchase-orders' && APPLY) {
     for (const id of reversedOrders) {
       try {

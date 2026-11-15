@@ -52,7 +52,10 @@ test.describe(
 for (const resource of ['stock-entries', 'stock-adjustments'] as const) {
   test(
     `${resource}: draft update`,
-    { annotation: { type: 'issue', description: 'https://github.com/iotechsoft-company/erp-api/issues/14' } },
+    {
+      tag: ['@api', '@stock', '@inventory', '@regression', '@mutation'],
+      annotation: { type: 'issue', description: 'https://github.com/iotechsoft-company/erp-api/issues/14' },
+    },
     async ({ allowMutation, api }) => {
       test.fixme(true, 'erp-api#14: intermittent PUT 404 after POST and successful GET; never retry writes')
       void allowMutation

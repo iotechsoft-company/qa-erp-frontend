@@ -121,6 +121,40 @@ test.describe(
       }
     })
 
+    test('absolute per-lot value triggers approval even when net qty/value is zero', async ({ allowMutation, api }) => {
+      void allowMutation
+      const s = new StockScenario(api)
+      try {
+        await s.seed()
+        const limit = await threshold(s)
+        const base = limit + 1
+        const delta = Math.floor(limit / 2) + 1
+        const first = await s.receipt(base, 1)
+        const second = await s.receipt(base, 1)
+        const firstLot = first.items[0]!.target_lot_id!
+        const secondLot = second.items[0]!.target_lot_id!
+        const input = s.adjustmentInput(firstLot, base + delta)
+        input.items.push({ lot_id: secondLot, counted_qty: base - delta })
+        const created = await api.create('/inventory-bc/v1/stock-adjustments', input)
+        const draft = await s.visible('stock-adjustments', created.id)
+        const before = await s.snapshot()
+        const held = await s.action('stock-adjustments', draft.id, 'submit')
+        expect(held).toMatchObject({ status: 'PENDING_APPROVAL', adjustment_value_snapshot: delta * 2 })
+        expect(await s.snapshot()).toEqual(before)
+        await s.action('stock-adjustments', draft.id, 'approve')
+        await quantity(s, base * 2)
+        expect((await s.lots()).find((lot) => lot.id === firstLot)!.available_qty).toBe(base + delta)
+        expect((await s.lots()).find((lot) => lot.id === secondLot)!.available_qty).toBe(base - delta)
+        await s.action('stock-adjustments', draft.id, 'cancel')
+        await zeroNetMovements(s, draft.id)
+        expect(
+          (await s.lots()).filter((lot) => [firstLot, secondLot].includes(lot.id)).map((lot) => lot.available_qty),
+        ).toEqual([base, base])
+      } finally {
+        await s.cleanup()
+      }
+    })
+
     test('changed lot blocks adjustment cancellation with exact conflict and no side effects', async ({
       allowMutation,
       api,
@@ -155,22 +189,35 @@ test.describe(
       }
     })
 
-    test('cancel held adjustment does not move stock', async ({ allowMutation, api }) => {
-      void allowMutation
-      const s = new StockScenario(api)
-      try {
-        await s.seed()
-        const limit = await threshold(s)
-        const receipt = await s.receipt()
-        const draft = await s.createAdjustment(receipt.items[0]!.target_lot_id!, 10 + limit + 1)
-        await s.action('stock-adjustments', draft.id, 'submit')
-        const before = await s.snapshot()
-        const cancelled = await s.action('stock-adjustments', draft.id, 'cancel')
-        expect(cancelled.status).toBe('CANCELLED')
-        expect(await s.snapshot()).toEqual(before)
-      } finally {
-        await s.cleanup()
-      }
-    })
+    test(
+      'known bug #18: cancelling held adjustment rejects without moving stock',
+      { annotation: { type: 'issue', description: 'https://github.com/iotechsoft-company/erp-api/issues/18' } },
+      async ({ allowMutation, api }) => {
+        void allowMutation
+        const s = new StockScenario(api)
+        try {
+          await s.seed()
+          const limit = await threshold(s)
+          const receipt = await s.receipt()
+          const draft = await s.createAdjustment(receipt.items[0]!.target_lot_id!, 10 + limit + 1)
+          const held = await s.action('stock-adjustments', draft.id, 'submit')
+          expect(held.status).toBe('PENDING_APPROVAL')
+          const before = await s.snapshot()
+          const lotId = receipt.items[0]!.target_lot_id!
+          const lot = (await s.lots()).find((row) => row.id === lotId)!
+          await reject(
+            await api.postResponse(`/inventory-bc/v1/stock-adjustments/${draft.id}/cancel`, {
+              cancel_reason: `${s.marker} ยกเลิกใบพักอนุมัติ`,
+            }),
+            409,
+            `Lot '${lotId}' (lot_number '${lot.lot_number}') has changed since this adjustment was submitted (available_qty=10, expected ${10 + limit + 1}) — cannot cancel. Submit a new stock adjustment instead.`,
+          )
+          expect((await s.read('stock-adjustments', draft.id)).status).toBe('PENDING_APPROVAL')
+          expect(await s.snapshot()).toEqual(before)
+        } finally {
+          await s.cleanup()
+        }
+      },
+    )
   },
 )
