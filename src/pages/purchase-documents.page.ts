@@ -147,19 +147,22 @@ export class PurchaseDocumentsPage extends BasePage {
     await this.dataTable.row(number).getByRole('button', { name: 'รับสินค้า', exact: true }).click()
     await expect(this.dialog).toContainText('ยืนยันการรับสินค้าเข้าสต็อก')
   }
-  async receiptCell(column: string) {
+  async receiptCell(column: string, sku?: string) {
     const table = this.dialog.getByRole('table')
     const columns = await table.getByRole('columnheader').allTextContents()
     const index = columns.indexOf(column)
     if (index < 0) throw new Error(`Unknown receive column ${column}`)
-    return table.locator('tbody').getByRole('row').getByRole('cell').nth(index)
+    const rows = table.locator('tbody').getByRole('row')
+    const row = sku ? rows.filter({ has: this.page.getByText(`SKU: ${sku}`, { exact: true }) }) : rows
+    await expect(row, 'Receive actions require one identified product row').toHaveCount(1)
+    return row.getByRole('cell').nth(index)
   }
-  async receive(warehouseLabel: string, remark: string, lot: string, quantity?: number) {
+  async receive(warehouseLabel: string, remark: string, lot: string, quantity?: number, sku?: string) {
     await new MuiSelect(this.page, this.dialog.getByRole('combobox', { name: 'คลังสินค้าปลายทาง' })).choose(warehouseLabel)
     if (quantity !== undefined)
-      await (await this.receiptCell('จำนวนรับจริง')).getByRole('spinbutton').fill(String(quantity))
+      await (await this.receiptCell('จำนวนรับจริง', sku)).getByRole('spinbutton').fill(String(quantity))
     await this.dialog.getByRole('textbox', { name: 'หมายเหตุการรับเข้า' }).fill(remark)
-    await (await this.receiptCell('เลขที่ล็อต (Lot No.)')).getByRole('textbox').fill(lot)
+    await (await this.receiptCell('เลขที่ล็อต (Lot No.)', sku)).getByRole('textbox').fill(lot)
     const result = this.page.waitForResponse(
       (res) =>
         /\/goods-receipts\/[^/]+\/submit$/.test(new URL(res.url()).pathname) && res.request().method() === 'POST',

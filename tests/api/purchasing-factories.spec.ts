@@ -1,4 +1,4 @@
-import { PurchasingScenario, type PurchaseRecord } from '@api/purchasing-scenario'
+import { PurchasingScenario } from '@api/purchasing-scenario'
 import { expect, test } from '@fixtures/test'
 
 test.describe('Purchasing factories', { tag: ['@purchasing', '@api', '@regression', '@mutation'] }, () => {
@@ -6,9 +6,7 @@ test.describe('Purchasing factories', { tag: ['@purchasing', '@api', '@regressio
     const prefix = kind === 'purchase-orders' ? 'supplier-bc' : 'inventory-bc'
     const create = async (scenario: PurchasingScenario) => {
       const order = await scenario.createOrder(kind === 'goods-receipts')
-      return kind === 'purchase-orders'
-        ? order
-        : scenario.api.create<PurchaseRecord>('/inventory-bc/v1/goods-receipts', scenario.receiptInput(order))
+      return kind === 'purchase-orders' ? order : scenario.createReceipt(order)
     }
 
     for (const operation of ['create/read/delete', 'update'] as const) {
