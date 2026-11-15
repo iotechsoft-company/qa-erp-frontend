@@ -6,6 +6,7 @@ export type QuotationInput = {
   document_date?: string
   valid_until: string
   remark_th: string
+  discount_mode?: 'none' | 'header' | 'per_item' | 'both'
   items: {
     product_id: string
     qty: number
