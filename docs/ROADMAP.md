@@ -251,3 +251,5 @@ Data (2026-11-13): test users `e2e.admin` / `e2e.staff` provisioned on dev; cust
 - `pnpm check-types && pnpm lint`: passed, 0 errors / 0 warnings. Prettier, diff whitespace, 25 primary coverage IDs and local Markdown targets checked.
 - Final cleanup dry-run: 0 active E2E documents, 0 master-data leftovers and 0 non-cancellable remainders. Retained cancelled audits: GR 73 / PO 145 / DN 15 / SO 111 / QT 112 = 456 total; lot and ledger history remains.
 - No new app issue was filed: the unrelated full-suite failures were obsolete Sales bug expectations after a deployed fix, migrated in a separate PR rather than skipped. PR #3 fixes were pushed/re-reviewed first and merged by Claude; PR #4 was synced with main using merge to resolve its squash-related conflicts. Receiving, Sales migration and coverage PRs require reviewer action; Codex did not merge any PR.
+
+- Main dependency sync: PR #4 merged as `0737711` and Sales migration PR #5 merged as `316f4cf`; both are now included through merge of origin/main. Only Receiving PR #6 remains pending review. Source/tests are unchanged from the full-suite-validated Receiving checkout.
