@@ -1,6 +1,5 @@
 import { PurchasingScenario } from '@api/purchasing-scenario'
 import { expect, test } from '@fixtures/test'
-import { readOrder } from '../purchasing/receiving-support'
 
 for (const mode of ['none', 'header', 'per_item', 'both'] as const) {
   // Deliberately send both sets of fields. The selected mode determines which apply.
@@ -21,7 +20,7 @@ for (const mode of ['none', 'header', 'per_item', 'both'] as const) {
           discount_value: 25,
           items: [{ product_id: s.productId, qty: 5, unit_cost: 80, discount_type: 'percent', discount: 12.5 }],
         })
-        const actual = await readOrder(api, created.id)
+        const actual = await s.readOrder(created.id)
         expect(actual).toMatchObject({
           status: 'DRAFT',
           discount_mode: mode,

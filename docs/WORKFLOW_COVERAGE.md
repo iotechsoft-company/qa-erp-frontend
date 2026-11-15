@@ -1,6 +1,6 @@
 # Business workflow coverage
 
-อัปเดตเมื่อ 2026-11-15 เทียบ [Workflow & API Sequence Guide](https://iots1.github.io/plan-erp/api-workflow-guide.html) กับ Purchasing baseline ใน [PR #3](https://github.com/iotechsoft-company/qa-erp-frontend/pull/3) (review fixes `c037770`, merge commit `ebcb6a7`) และ P0.2 บน `codex/purchasing-receiving` ที่รอ review ขอบเขตใหม่ระบุในแถว A2/A3; เอกสาร baseline มาจาก PR #4 ที่ merge แล้วเป็น `0737711` และ healthy Sales create migration แยกใน [PR #5](https://github.com/iotechsoft-company/qa-erp-frontend/pull/5) ตาม deployed fix
+อัปเดตเมื่อ 2026-11-15 เทียบ [Workflow & API Sequence Guide](https://iots1.github.io/plan-erp/api-workflow-guide.html) กับ merged baseline: Purchasing PR #3 (`ebcb6a7`), Sales create migration PR #5 (`316f4cf`) และ Receiving PR #6 (`58a6b44`); coverage docs baseline คือ PR #4 (`0737711`) งาน guard/refactor ของ review follow-ups อยู่ใน [REVIEW_FOLLOWUPS.md](REVIEW_FOLLOWUPS.md) โดยไม่เพิ่มขอบเขต business flow ส่วน P0.3 ยังเป็น PR ถัดไป
 
 คู่มือมีตัวเลขสรุป 21/23 flows ไม่ตรงกับเนื้อหาที่เพิ่มภายหลัง เอกสารนี้จึงแจกแจง **25 รหัสหลัก A1–A5, B1–B5, C1–C10, D1–D2, E1–E3** และหัวข้อย่อยทั้งหมด รวม C9 ที่ไม่มีในตาราง Overview ด้วย ไม่มีการคิดเปอร์เซ็นต์จากจำนวนเทสหรือ endpoint
 

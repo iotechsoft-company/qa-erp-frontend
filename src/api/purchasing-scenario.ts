@@ -12,6 +12,20 @@ export type PurchaseRecord = {
   remark?: { th?: string }
   items?: { id: string; product_id: string; qty: number; received_qty?: number; returned_qty?: number }[]
 }
+export type PurchaseOrderRecord = PurchaseRecord & {
+  sub_total: number
+  total_discount: number
+  total: number
+  discount_mode: string
+  items: {
+    id: string
+    product_id: string
+    qty: number
+    received_qty: number
+    returned_qty: number
+    line_total: number
+  }[]
+}
 export class PurchasingScenario {
   readonly marker = e2eCode('PUR')
   readonly supplier = buildSupplier({ supplier_type: 'company', billing_currency: 'THB' })
@@ -95,9 +109,15 @@ export class PurchasingScenario {
       this.receiptInput(order ?? (await this.createOrder(true))),
     )
   }
+  async readOrder(id: string) {
+    return (
+      await this.api.get<{ data: { attributes: PurchaseOrderRecord } }>(`/supplier-bc/v1/purchase-orders/${id}`, {
+        relations: 'items',
+      })
+    ).data.attributes
+  }
   async orderStatus(id: string) {
-    return (await this.api.get<{ data: { attributes: PurchaseRecord } }>(`/supplier-bc/v1/purchase-orders/${id}`)).data
-      .attributes.status
+    return (await this.readOrder(id)).status
   }
   private async cleanupDocument(
     resource: 'goods-receipts' | 'purchase-orders',

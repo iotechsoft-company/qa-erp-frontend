@@ -1,7 +1,7 @@
 import { PurchasingScenario, type PurchaseRecord } from '@api/purchasing-scenario'
 import { e2eCode } from '@data/factories'
 import { expect, test } from '@fixtures/test'
-import { expectOrder, expectRejection, ledger, lots, readOrder, snapshot } from './receiving-support'
+import { expectOrder, expectOverReceipt, expectRejection, ledger, lots, snapshot } from './receiving-support'
 
 const grPath = '/inventory-bc/v1/goods-receipts'
 const poPath = '/supplier-bc/v1/purchase-orders'
@@ -63,22 +63,25 @@ test.describe('Purchasing receiving business workflow', { tag: ['@purchasing', '
       const first = await api.create<PurchaseRecord>(grPath, firstInput)
       await api.post(`${grPath}/${first.id}/submit`, {})
       await expectOrder(s, order.id, 'PARTIAL', 5, 2)
-      const settings = await api.get<{ data: { attributes: { over_receipt_allowance: number } } }>(
+      const settings = await api.get<{ data: { attributes: { over_receipt_allowance: number | string } } }>(
         '/inventory-bc/v1/stock-settings',
       )
       const allowance = settings.data.attributes.over_receipt_allowance
-      const max = 5 * (1 + allowance / 100)
+      const max = (5 * (100 + Number(allowance))) / 100
       const qty = Math.floor(max - 2) + 1
       const input = s.receiptInput(order)
       input.items[0]!.qty = qty
       const invalid = await api.create<PurchaseRecord>(grPath, input)
       const before = await snapshot(s, order.id)
       const response = await api.postResponse(`${grPath}/${invalid.id}/submit`, {})
-      await expectRejection(
-        response,
-        409,
-        `Receiving ${qty} of product '${s.productId}' would take purchase order item '${order.items![0]!.id}' to ${2 + qty}, exceeding the allowed ${max} (qty 5 + ${allowance}% over-receipt allowance).`,
-      )
+      await expectOverReceipt(response, {
+        productId: s.productId,
+        itemId: order.items![0]!.id,
+        qty,
+        received: 2,
+        ordered: 5,
+        allowance,
+      })
       expect(await snapshot(s, order.id)).toEqual(before)
       expect(
         (await api.get<{ data: { attributes: PurchaseRecord } }>(`${grPath}/${invalid.id}`)).data.attributes.status,
@@ -157,10 +160,9 @@ test.describe('Purchasing receiving business workflow', { tag: ['@purchasing', '
         await expectOrder(s, order.id, 'SENT', 1, 0)
         expect(await lots(s)).toEqual([])
         expect(await ledger(s)).toEqual([])
-        const submitted = await api.post<{ data: { attributes: { items: { lot_id: string; line_total: number }[] } } }>(
-          `${grPath}/${receipt.id}/submit`,
-          {},
-        )
+        const submitted = await api.post<{
+          data: { attributes: { grn_number: string; items: { lot_id: string; line_total: number }[] } }
+        }>(`${grPath}/${receipt.id}/submit`, {})
         await expectOrder(s, order.id, 'RECEIVED', 1, 1)
         expect(submitted.data.attributes.items).toEqual([
           expect.objectContaining({ line_total: 100, lot_id: expect.any(String) }),
@@ -178,6 +180,8 @@ test.describe('Purchasing receiving business workflow', { tag: ['@purchasing', '
             import_cost: 100,
           }),
         ])
+        expect(submitted.data.attributes.grn_number).toEqual(expect.any(String))
+        expect(submitted.data.attributes.grn_number).not.toBe('')
         const entries = await ledger(s)
         expect(entries).toEqual([
           expect.objectContaining({
@@ -190,7 +194,7 @@ test.describe('Purchasing receiving business workflow', { tag: ['@purchasing', '
             lot_balance_after: 1,
             source_doc_type: 'GOODS_RECEIPT',
             source_doc_id: receipt.id,
-            source_doc_number: receipt.grn_number,
+            source_doc_number: submitted.data.attributes.grn_number,
           }),
         ])
         const beforeRepeat = await snapshot(s, order.id)
@@ -268,7 +272,7 @@ for (const mode of ['none', 'header', 'per_item', 'both'] as const) {
         await purchaseCreatePage.expectLineTotal(s.sku, 1000 - lineDiscount)
         await purchaseCreatePage.remark.fill(`${s.marker} ตรวจยอดส่วนลด`)
         const created = await purchaseCreatePage.submit('po')
-        const order = await readOrder(api, created.data.id)
+        const order = await s.readOrder(created.data.id)
         expect(order).toMatchObject({
           discount_mode: mode,
           sub_total: 10 * 100,
