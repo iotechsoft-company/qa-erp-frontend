@@ -182,3 +182,5 @@ export * from './sales'
 export * from './purchasing'
 
 export * from './stock'
+
+export * from './returns'

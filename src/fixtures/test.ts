@@ -3,6 +3,7 @@ import { test as base, expect } from '@playwright/test'
 import { ApiClient } from '@api/api-client'
 import { env, requireCredentials } from '@config/env'
 import {
+  PurchaseReturnsPage,
   PurchaseOrdersPage,
   GoodsReceiptsPage,
   PurchaseCreatePage,
@@ -20,6 +21,7 @@ import {
 } from '@pages/index'
 
 type Pages = {
+  purchaseReturnsPage: PurchaseReturnsPage
   purchaseOrdersPage: PurchaseOrdersPage
   goodsReceiptsPage: GoodsReceiptsPage
   purchaseCreatePage: PurchaseCreatePage
@@ -44,6 +46,7 @@ type Helpers = {
 }
 
 export const test = base.extend<Pages & Helpers>({
+  purchaseReturnsPage: async ({ page }, use) => use(new PurchaseReturnsPage(page)),
   purchaseOrdersPage: async ({ page }, use) => use(new PurchaseOrdersPage(page)),
   goodsReceiptsPage: async ({ page }, use) => use(new GoodsReceiptsPage(page)),
   purchaseCreatePage: async ({ page }, use) => use(new PurchaseCreatePage(page)),

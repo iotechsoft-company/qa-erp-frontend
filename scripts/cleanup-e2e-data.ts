@@ -27,13 +27,15 @@ const APPLY = process.argv.includes('--apply')
 
 const TARGETS: { path: string; field: string; document?: SalesResource | PurchasingResource; stock?: StockResource }[] =
   [
-    { path: '/inventory-bc/v1/goods-receipts', field: 'remark_th', document: 'goods-receipts' },
-    { path: '/supplier-bc/v1/purchase-orders', field: 'remark_th', document: 'purchase-orders' },
-    { path: '/sales-bc/v1/delivery-notes', field: 'remark_th', document: 'delivery-notes' },
-    { path: '/sales-bc/v1/sales-orders', field: 'remark_th', document: 'sales-orders' },
-    { path: '/sales-bc/v1/quotations', field: 'remark_th', document: 'quotations' },
     { path: '/inventory-bc/v1/stock-entries', field: 'remark_th', stock: 'stock-entries' },
     { path: '/inventory-bc/v1/stock-adjustments', field: 'remark_th', stock: 'stock-adjustments' },
+    { path: '/sales-bc/v1/sales-returns', field: 'return_reason', document: 'sales-returns' },
+    { path: '/sales-bc/v1/delivery-notes', field: 'remark_th', document: 'delivery-notes' },
+    { path: '/inventory-bc/v1/purchase-returns', field: 'return_reason', document: 'purchase-returns' },
+    { path: '/inventory-bc/v1/goods-receipts', field: 'remark_th', document: 'goods-receipts' },
+    { path: '/supplier-bc/v1/purchase-orders', field: 'remark_th', document: 'purchase-orders' },
+    { path: '/sales-bc/v1/sales-orders', field: 'remark_th', document: 'sales-orders' },
+    { path: '/sales-bc/v1/quotations', field: 'remark_th', document: 'quotations' },
     { path: '/sales-bc/v1/customers', field: 'code' },
     { path: '/supplier-bc/v1/suppliers', field: 'code' },
     { path: '/inventory-bc/v1/products', field: 'sku' },
@@ -92,19 +94,35 @@ async function cleanupStockDocuments() {
     }
     const rows: { id: string; attributes: StockCleanupRecord }[] = (await response.json()).data ?? []
     const mine = rows.filter((row) => row.attributes.remark?.th?.startsWith('E2E-'))
+    let active = 0
+    let cancelled = 0
+    let unknown = 0
+    for (const row of mine) {
+      try {
+        const action = stockCleanupAction(row.attributes)
+        if (action === 'retain') cancelled++
+        else active++
+        stockDocuments.push({ id: row.id, ...row.attributes, resource: target.stock! })
+      } catch (error) {
+        unknown++
+        failures++
+        console.warn(
+          `✗ ${target.path}/${row.id}: unknown stock status '${row.attributes.status}'; skipped (${String(error)})`,
+        )
+      }
+    }
     console.log(
-      `${target.path}: ${mine.filter((row) => stockCleanupAction(row.attributes) !== 'retain').length} active E2E record(s); ${mine.filter((row) => row.attributes.status === 'CANCELLED').length} cancelled audit record(s) retained`,
+      `${target.path}: ${active + unknown} active E2E record(s); ${cancelled} cancelled audit record(s) retained; ${unknown} unknown status record(s) skipped`,
     )
-    stockDocuments.push(...mine.map((row) => ({ id: row.id, ...row.attributes, resource: target.stock! })))
   }
   for (const record of stockDocuments.sort((a, b) => stockPostingTime(b) - stockPostingTime(a))) {
-    const action = stockCleanupAction(record)
-    if (action === 'retain') continue
-    if (!APPLY) {
-      console.log(`  - ${record.remark?.th} (${record.status}; ${action})`)
-      continue
-    }
     try {
+      const action = stockCleanupAction(record)
+      if (action === 'retain') continue
+      if (!APPLY) {
+        console.log(`  - ${record.remark?.th} (${record.status}; ${action})`)
+        continue
+      }
       const path = `${BASE}/api/inventory-bc/v1/${record.resource}/${record.id}`
       const write = async (suffix: string, method: string) => {
         const response = await fetch(`${path}${suffix}`, {
@@ -191,7 +209,7 @@ for (const t of TARGETS) {
   }
   const actionFor = (row: (typeof mine)[number]) => {
     if (!APPLY && t.document === 'purchase-orders' && receiptDependentOrders.has(row.id)) return 'defer'
-    if (t.document === 'purchase-orders' || t.document === 'goods-receipts')
+    if (t.document === 'purchase-orders' || t.document === 'goods-receipts' || t.document === 'purchase-returns')
       return purchasingCleanupAction(t.document, row.attributes as PurchasingCleanupRecord)
     return t.document ? salesCleanupAction(t.document, row.attributes as SalesCleanupRecord) : 'delete'
   }

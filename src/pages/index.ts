@@ -14,3 +14,4 @@ export * from './sales-create.page'
 
 export * from './purchase-documents.page'
 export * from './purchase-create.page'
+export { PurchaseReturnsPage } from './purchase-returns.page'

@@ -1,4 +1,4 @@
-export type PurchasingResource = 'purchase-orders' | 'goods-receipts'
+export type PurchasingResource = 'purchase-orders' | 'goods-receipts' | 'purchase-returns'
 export type PurchasingCleanupRecord = {
   status: string
   items?: { received_qty?: number; returned_qty?: number }[]
@@ -9,7 +9,8 @@ export function purchasingCleanupAction(
   record: PurchasingCleanupRecord,
 ): 'delete' | 'cancel' | 'retain' {
   if (record.status === 'DRAFT') return 'delete'
-  if (resource === 'goods-receipts') return record.status === 'SUBMITTED' ? 'cancel' : 'retain'
+  if (resource === 'goods-receipts' || resource === 'purchase-returns')
+    return record.status === 'SUBMITTED' ? 'cancel' : 'retain'
   if (record.items?.some((item) => Number(item.received_qty ?? 0) - Number(item.returned_qty ?? 0) > 0)) return 'retain'
   return ['APPROVED', 'SENT', 'PARTIAL'].includes(record.status) ? 'cancel' : 'retain'
 }
