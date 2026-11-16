@@ -4,7 +4,7 @@ import { promisify } from 'node:util'
 import { expect, test } from '@fixtures/test'
 
 /** Real CLI, isolated transport. A decoy E2E-external record must never be written. */
-async function cleanup(apply: boolean, refuseReceipt = false) {
+async function cleanup(apply: boolean, refuseReceipt = false, unknownStatus = false) {
   const writes: string[] = []
   let stock = 100
   const documents = [
@@ -38,6 +38,14 @@ async function cleanup(apply: boolean, refuseReceipt = false) {
       created_at: '2026-01-01T05:00:00Z',
     },
   ]
+  if (unknownStatus)
+    documents.push({
+      id: 'unknown',
+      resource: 'stock-entries',
+      status: 'REJECTED',
+      submitted_at: '2026-01-01T06:00:00Z',
+      created_at: '2026-01-01T06:00:00Z',
+    })
   const server = createServer((request, response) => {
     const path = new URL(request.url!, 'http://localhost').pathname
     response.setHeader('Content-Type', 'application/json')
@@ -144,5 +152,14 @@ test.describe('D1/D2 cleanup CLI safety (localhost only)', { tag: ['@stock', '@a
     expect(result.code).toBe(1)
     expect(result.writes).not.toContain('DELETE /api/inventory-bc/v1/products/owned-product')
     expect(result.stderr).toContain('stock nonzero or unreadable; refusing deletion')
+  })
+
+  test('unknown stock status is reported but other documents and resources are still cleaned', async () => {
+    const result = await cleanup(true, false, true)
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain("unknown stock status 'REJECTED'")
+    expect(result.writes).not.toContain('POST /api/inventory-bc/v1/stock-entries/unknown/cancel')
+    expect(result.writes).toContain('POST /api/inventory-bc/v1/stock-entries/receipt/cancel')
+    expect(result.writes).toContain('DELETE /api/inventory-bc/v1/products/owned-product')
   })
 })

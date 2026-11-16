@@ -92,19 +92,35 @@ async function cleanupStockDocuments() {
     }
     const rows: { id: string; attributes: StockCleanupRecord }[] = (await response.json()).data ?? []
     const mine = rows.filter((row) => row.attributes.remark?.th?.startsWith('E2E-'))
+    let active = 0
+    let cancelled = 0
+    let unknown = 0
+    for (const row of mine) {
+      try {
+        const action = stockCleanupAction(row.attributes)
+        if (action === 'retain') cancelled++
+        else active++
+        stockDocuments.push({ id: row.id, ...row.attributes, resource: target.stock! })
+      } catch (error) {
+        unknown++
+        failures++
+        console.warn(
+          `✗ ${target.path}/${row.id}: unknown stock status '${row.attributes.status}'; skipped (${String(error)})`,
+        )
+      }
+    }
     console.log(
-      `${target.path}: ${mine.filter((row) => stockCleanupAction(row.attributes) !== 'retain').length} active E2E record(s); ${mine.filter((row) => row.attributes.status === 'CANCELLED').length} cancelled audit record(s) retained`,
+      `${target.path}: ${active + unknown} active E2E record(s); ${cancelled} cancelled audit record(s) retained; ${unknown} unknown status record(s) skipped`,
     )
-    stockDocuments.push(...mine.map((row) => ({ id: row.id, ...row.attributes, resource: target.stock! })))
   }
   for (const record of stockDocuments.sort((a, b) => stockPostingTime(b) - stockPostingTime(a))) {
-    const action = stockCleanupAction(record)
-    if (action === 'retain') continue
-    if (!APPLY) {
-      console.log(`  - ${record.remark?.th} (${record.status}; ${action})`)
-      continue
-    }
     try {
+      const action = stockCleanupAction(record)
+      if (action === 'retain') continue
+      if (!APPLY) {
+        console.log(`  - ${record.remark?.th} (${record.status}; ${action})`)
+        continue
+      }
       const path = `${BASE}/api/inventory-bc/v1/${record.resource}/${record.id}`
       const write = async (suffix: string, method: string) => {
         const response = await fetch(`${path}${suffix}`, {
