@@ -84,8 +84,12 @@ export class ReturnScenario {
       const order = await this.fulfillment.newOrder(this.qty)
       this.orderId = order.id
       const draft = await this.fulfillment.draft(order, this.qty)
+      this.source = draft
       if (submitSource) await this.api.post(`/sales-bc/v1/delivery-notes/${draft.id}/submit`, {})
-      this.source = { id: draft.id, ...(await this.fulfillment.note(draft.id)) }
+      await expect(async () => {
+        this.source = { id: draft.id, ...(await this.fulfillment!.note(draft.id)) }
+        expect(this.source.status).toBe(submitSource ? 'SUBMITTED' : 'DRAFT')
+      }).toPass({ timeout: 10_000 })
       await expect.poll(() => this.inventory.stockQty(), { timeout: 10_000 }).toBe(submitSource ? 0 : this.qty)
       await expect
         .poll(async () => (await this.fulfillment!.costs()).reduce((sum, row) => sum + row.cogs, 0), {

@@ -1,4 +1,4 @@
-export type SalesResource = 'quotations' | 'sales-orders' | 'delivery-notes'
+export type SalesResource = 'quotations' | 'sales-orders' | 'delivery-notes' | 'sales-returns'
 export type SalesCleanupRecord = {
   status: string
   sales_order_id?: string | null
@@ -20,5 +20,6 @@ export function salesCleanupAction(
     return ['PENDING_APPROVAL', 'CONFIRMED'].includes(record.status) ? 'cancel' : 'retain'
   }
   if (record.status === 'DRAFT') return 'delete'
+  if (resource === 'sales-returns') return record.status === 'SUBMITTED' ? 'cancel' : 'retain'
   return ['PENDING_APPROVAL', 'SUBMITTED'].includes(record.status) ? 'cancel' : 'retain'
 }

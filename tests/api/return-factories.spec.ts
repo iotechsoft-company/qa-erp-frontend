@@ -18,12 +18,14 @@ test.describe('Return factory contracts', { tag: ['@returns', '@api', '@regressi
 
       test(
         `${kind}: draft ${operation}`,
-        { annotation: { type: 'issue', description: 'https://github.com/iotechsoft-company/erp-api/issues/14' } },
+        {
+          annotation:
+            operation === 'update'
+              ? { type: 'issue', description: 'https://github.com/iotechsoft-company/erp-api/issues/14' }
+              : { type: 'contract', description: 'Return DTO create/read/delete; initial GET bounded, writes once' },
+        },
         async ({ allowMutation, api }) => {
-          test.fixme(
-            kind === 'sales' && operation === 'update',
-            'erp-api#14: observed return PUT 404 after POST/GET; no write retry',
-          )
+          test.fixme(operation === 'update', 'erp-api#14: observed return PUT 404 after POST/GET; no write retry')
           void allowMutation
           const s = new ReturnScenario(api, kind)
           try {

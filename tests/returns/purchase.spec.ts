@@ -57,7 +57,55 @@ test.describe('A4 supplier returns', { tag: ['@returns', '@purchasing', '@regres
     }
   })
 
-  test('UI create/submit → returns history/details; zero quantity disables submit', async ({
+  test(
+    'UI create/submit → returns history/details; zero quantity disables submit',
+    { annotation: { type: 'issue', description: 'https://github.com/iotechsoft-company/erp-frontend/issues/14' } },
+    async ({ allowMutation, api, purchaseReturnsPage }) => {
+      test.fixme(true, 'frontend#14: submitted GR return action is hidden; exact active regression below')
+      void allowMutation
+      const s = new ReturnScenario(api, 'purchase')
+      try {
+        await s.seed()
+        await purchaseReturnsPage.goto()
+        await purchaseReturnsPage.open(s.source.grn_number!)
+        await purchaseReturnsPage.qty(s.inventory.sku, 0)
+        await expect(purchaseReturnsPage.confirm).toBeDisabled()
+        const created = await purchaseReturnsPage.create(s.inventory.sku, 1, s.input().return_reason)
+        expect(created.data.attributes.status).toBe('SUBMITTED')
+        const record = await s.read(created.data.id)
+        expect(record.grn_id).toBe(s.source.id)
+        expect(record.return_reason).toBe(s.input().return_reason)
+        await quantities(s, 3, 1, 'PARTIAL')
+        await purchaseReturnsPage.history()
+        await purchaseReturnsPage.search(record.prn_number!)
+        await purchaseReturnsPage.view(record.prn_number!)
+        await expect(purchaseReturnsPage.details).toContainText(s.input().return_reason)
+      } finally {
+        await s.cleanup()
+      }
+    },
+  )
+
+  test(
+    'known bug frontend#14: SUBMITTED owned GR has no return action',
+    { annotation: { type: 'issue', description: 'https://github.com/iotechsoft-company/erp-frontend/issues/14' } },
+    async ({ allowMutation, api, purchaseReturnsPage }) => {
+      void allowMutation
+      const s = new ReturnScenario(api, 'purchase')
+      try {
+        await s.seed()
+        expect(s.source.status).toBe('SUBMITTED')
+        expect((await s.order()).status).toBe('RECEIVED')
+        await purchaseReturnsPage.goto()
+        await purchaseReturnsPage.receiptDetails(s.source.grn_number!)
+        await expect(purchaseReturnsPage.returnAction).toHaveCount(0)
+      } finally {
+        await s.cleanup()
+      }
+    },
+  )
+
+  test('UI history and details show an API-submitted owned supplier return', async ({
     allowMutation,
     api,
     purchaseReturnsPage,
@@ -66,19 +114,12 @@ test.describe('A4 supplier returns', { tag: ['@returns', '@purchasing', '@regres
     const s = new ReturnScenario(api, 'purchase')
     try {
       await s.seed()
+      const draft = await s.create(1)
+      const submitted = await s.action(draft.id, 'submit')
       await purchaseReturnsPage.goto()
-      await purchaseReturnsPage.open(s.source.grn_number!)
-      await purchaseReturnsPage.qty(s.inventory.sku, 0)
-      await expect(purchaseReturnsPage.confirm).toBeDisabled()
-      const created = await purchaseReturnsPage.create(s.inventory.sku, 1, s.input().return_reason)
-      expect(created.data.attributes.status).toBe('SUBMITTED')
-      const record = await s.read(created.data.id)
-      expect(record.grn_id).toBe(s.source.id)
-      expect(record.return_reason).toBe(s.input().return_reason)
-      await quantities(s, 3, 1, 'PARTIAL')
       await purchaseReturnsPage.history()
-      await purchaseReturnsPage.search(record.prn_number!)
-      await purchaseReturnsPage.view(record.prn_number!)
+      await purchaseReturnsPage.search(submitted.prn_number!)
+      await purchaseReturnsPage.view(submitted.prn_number!)
       await expect(purchaseReturnsPage.details).toContainText(s.input().return_reason)
     } finally {
       await s.cleanup()

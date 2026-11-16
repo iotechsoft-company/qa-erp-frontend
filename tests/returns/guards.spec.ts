@@ -130,7 +130,7 @@ test.describe(
         await rejection(
           await api.postResponse(`${s.path}/${draft.id}/submit`, {}),
           409,
-          `Insufficient stock in lot '${lot.id}' (lot_number '${lot.lot_number}'): requested 2, available 1.`,
+          `Lot '${lot.id}' (lot_number '${lot.lot_number}') has only 1 on hand — cannot return 2. Some of this lot has already been issued; reverse that movement first.`,
         )
         expect((await s.read(draft.id)).status).toBe('DRAFT')
         expect(await s.snapshot()).toEqual(before)
@@ -157,6 +157,7 @@ test.describe(
           await api.postResponse(`${s.path}/${draft.id}/cancel`, { cancel_reason: `${s.marker} คืนถูกเบิกแล้ว` }),
           409,
           `Lot '${lot.id}' (lot_number '${lot.lot_number}') has only 1 on hand — cannot take back 2 of a cancelled sales return. The returned goods have since been issued again; reverse that movement first.`,
+          409000, // Plain stock-return RPC ConflictException retains the numeric error code.
         )
         expect((await s.read(draft.id)).status).toBe('SUBMITTED')
         expect(await s.snapshot()).toEqual(before)
@@ -168,22 +169,37 @@ test.describe(
       }
     })
 
-    test('sales: draft return dependency must block DN cancellation', async ({ allowMutation, api }) => {
-      void allowMutation
-      const s = new ReturnScenario(api, 'sales')
-      try {
-        await s.seed()
-        const draft = await s.create(1)
-        expect(draft.status).toBe('DRAFT')
-        const before = await s.snapshot()
-        const response = await api.postResponse(`/sales-bc/v1/delivery-notes/${s.source.id}/cancel`, {
-          cancel_reason: `${s.marker} ยังมีใบรับคืน`,
-        })
-        expect(response.status()).toBe(409)
-        expect(await s.snapshot()).toEqual(before)
-      } finally {
-        await s.cleanup()
+    for (const state of ['DRAFT', 'SUBMITTED'] as const) {
+      const prepare = {
+        DRAFT: async () => {},
+        SUBMITTED: async (s: ReturnScenario, id: string) => {
+          await s.action(id, 'submit')
+          await cogs(s, 3, 120, 4)
+        },
       }
-    })
+
+      test(`sales: ${state} return dependency blocks DN cancellation`, async ({ allowMutation, api }) => {
+        void allowMutation
+        const s = new ReturnScenario(api, 'sales')
+        try {
+          await s.seed()
+          const draft = await s.create(1)
+          await prepare[state](s, draft.id)
+          expect((await s.read(draft.id)).status).toBe(state)
+          const before = await s.snapshot()
+          await rejection(
+            await api.postResponse(`/sales-bc/v1/delivery-notes/${s.source.id}/cancel`, {
+              cancel_reason: `${s.marker} ยังมีใบรับคืน`,
+            }),
+            409,
+            `Delivery note '${s.source.id}' still has 1 sales return(s) (${draft.srn_number}) — cancel them first; cancelling the delivery on top would put the returned goods back twice.`,
+          )
+          expect((await s.fulfillment!.note(s.source.id)).status).toBe('SUBMITTED')
+          expect(await s.snapshot()).toEqual(before)
+        } finally {
+          await s.cleanup()
+        }
+      })
+    }
   },
 )

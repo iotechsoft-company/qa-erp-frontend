@@ -50,7 +50,7 @@ export async function rejection(
   response: { status(): number; json(): Promise<unknown> },
   status: number,
   detail: string,
-  code = 'CONFLICT',
+  code: string | 409000 = 'CONFLICT',
 ) {
   expect(response.status()).toBe(status)
   expect(await response.json()).toMatchObject({
