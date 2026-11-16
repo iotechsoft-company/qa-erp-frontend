@@ -127,6 +127,8 @@ test.describe('Sales fulfillment business workflow', { tag: ['@sales', '@regress
         lot: (typeof allocations)[number],
       ) => {
         await deliveryNotesPage.goto()
+        // Scope real UI pagination to actionable notes rather than the growing cancelled audit history.
+        await deliveryNotesPage.filterStatus('ฉบับร่าง', 'DRAFT')
         await deliveryNotesPage.findRecord(draft.dn_number)
         await deliveryNotesPage.submit(draft.dn_number)
         await expect.poll(() => s.stock.inventory.stockQty()).toBe(2 - delivered)
@@ -157,6 +159,7 @@ test.describe('Sales fulfillment business workflow', { tag: ['@sales', '@regress
         [first, allocations[0]!, 2, 'CONFIRMED'],
       ] as const) {
         await deliveryNotesPage.goto()
+        await deliveryNotesPage.filterStatus('ยืนยันส่งแล้ว', 'SUBMITTED')
         await deliveryNotesPage.findRecord(draft.dn_number)
         await deliveryNotesPage.cancel(draft.dn_number, `${s.sales.marker} คืนยอดส่งบางส่วน`)
         await expectFinancialReversed(s, draft.items[0]!.id, lot.unitCost)
