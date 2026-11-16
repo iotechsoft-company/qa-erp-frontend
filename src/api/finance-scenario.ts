@@ -175,7 +175,7 @@ export class FinanceScenario {
           for (const account of new Set(lines.map((l) => l.account_id)))
             expect(
               Math.round(
-                lines.filter((l) => l.account_id === account).reduce((sum, l) => sum + l.debit - l.credit, 0) * 100,
+                lines.filter((l) => l.account_id === account).reduce((sum, l) => sum + l.debit - l.credit, 0) * 10_000,
               ),
             ).toBe(0)
         } catch (error) {

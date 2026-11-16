@@ -1,6 +1,7 @@
 import { expect } from '@fixtures/test'
 import { type FinanceRecord, type FinanceScenario } from '@api/finance-scenario'
-export const money = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
+// Wire money uses numeric(18,4); source: libs/common/src/utils/discount.util.ts (roundMoney).
+export const money = (n: number) => Math.round((n + Number.EPSILON) * 10_000) / 10_000
 export async function posting(s: FinanceScenario, doc: FinanceRecord, reversed = false) {
   await expect(async () => {
     const rows = await s.ledger(doc.id)

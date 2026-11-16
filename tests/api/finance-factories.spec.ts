@@ -22,19 +22,32 @@ test.describe('Finance factories ↔ DTO (API path)', { tag: ['@finance', '@api'
       }
     })
 
-    test(`${kind}: draft update persists remark without posting`, async ({ allowMutation, api }) => {
-      void allowMutation
-      const s = new FinanceScenario(api, kind)
-      try {
-        await s.seed()
-        const doc = await s.create()
-        const remark = `${s.marker} แก้ไขหมายเหตุ`
-        await api.put(`${s.path}/${doc.id}`, { remark_th: remark })
-        expect((await s.read(doc.id)).remark.th).toBe(remark)
-        expect(await s.ledger(doc.id)).toEqual([])
-      } finally {
-        await s.cleanup()
-      }
-    })
+    test(
+      `${kind}: draft update persists remark without posting`,
+      {
+        annotation:
+          kind === 'ar'
+            ? { type: 'issue', description: 'https://github.com/iotechsoft-company/erp-api/issues/14' }
+            : { type: 'contract', description: 'AP draft update remains active; no failed write is retried' },
+      },
+      async ({ allowMutation, api }) => {
+        test.fixme(
+          kind === 'ar',
+          'erp-api#14: receipt PUT returned 404 after POST/GET; initial + 1/3 independent repeats',
+        )
+        void allowMutation
+        const s = new FinanceScenario(api, kind)
+        try {
+          await s.seed()
+          const doc = await s.create()
+          const remark = `${s.marker} แก้ไขหมายเหตุ`
+          await api.put(`${s.path}/${doc.id}`, { remark_th: remark })
+          expect((await s.read(doc.id)).remark.th).toBe(remark)
+          expect(await s.ledger(doc.id)).toEqual([])
+        } finally {
+          await s.cleanup()
+        }
+      },
+    )
   }
 })

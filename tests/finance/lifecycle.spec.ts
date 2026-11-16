@@ -30,6 +30,16 @@ test.describe(
         })
         await posting(s, posted)
         await debt(s, posted.total)
+        const receiptBefore = await s.source.snapshot()
+        await rejected(
+          await api.postResponse(`/inventory-bc/v1/goods-receipts/${s.source.source.id}/cancel`, {
+            cancel_reason: `${s.marker} ตรวจใบตั้งหนี้`,
+          }),
+          409,
+          `Goods receipt '${s.source.source.id}' is still billed by 1 submitted AP document(s) (${posted.document_number}) — cancel them first; cancelling the receipt under them would leave a supplier debt with no goods behind it.`,
+        )
+        expect(await s.source.snapshot()).toEqual(receiptBefore)
+
         const returned = await s.source.create(1)
         await s.source.action(returned.id, 'submit')
         const cn = await s.create(s.apInput({ document_type: 'CREDIT_NOTE', reference_ap_invoice_id: bill.id }))

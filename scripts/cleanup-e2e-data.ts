@@ -119,7 +119,7 @@ async function cleanupStockDocuments() {
       }
     }
     console.log(
-      `${target.path}: ${active + unknown} active E2E record(s); ${cancelled} ${auditLabel} audit record(s) retained; ${unknown} unknown status record(s) skipped`,
+      `${target.path}: ${active + unknown} active E2E record(s); ${cancelled} cancelled audit record(s) retained; ${unknown} unknown status record(s) skipped`,
     )
   }
   for (const record of stockDocuments.sort((a, b) => stockPostingTime(b) - stockPostingTime(a))) {
