@@ -9,6 +9,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { expect } from '@playwright/test'
 import { salesCleanupAction, type SalesCleanupRecord, type SalesResource } from '../src/data/sales-cleanup.ts'
+import { financeCleanupAction, financeCleanupOrder, type FinanceResource } from '../src/data/finance-cleanup.ts'
 
 import {
   purchasingCleanupAction,
@@ -25,23 +26,29 @@ import {
 
 const APPLY = process.argv.includes('--apply')
 
-const TARGETS: { path: string; field: string; document?: SalesResource | PurchasingResource; stock?: StockResource }[] =
-  [
-    { path: '/inventory-bc/v1/stock-entries', field: 'remark_th', stock: 'stock-entries' },
-    { path: '/inventory-bc/v1/stock-adjustments', field: 'remark_th', stock: 'stock-adjustments' },
-    { path: '/sales-bc/v1/sales-returns', field: 'return_reason', document: 'sales-returns' },
-    { path: '/sales-bc/v1/delivery-notes', field: 'remark_th', document: 'delivery-notes' },
-    { path: '/inventory-bc/v1/purchase-returns', field: 'return_reason', document: 'purchase-returns' },
-    { path: '/inventory-bc/v1/goods-receipts', field: 'remark_th', document: 'goods-receipts' },
-    { path: '/supplier-bc/v1/purchase-orders', field: 'remark_th', document: 'purchase-orders' },
-    { path: '/sales-bc/v1/sales-orders', field: 'remark_th', document: 'sales-orders' },
-    { path: '/sales-bc/v1/quotations', field: 'remark_th', document: 'quotations' },
-    { path: '/sales-bc/v1/customers', field: 'code' },
-    { path: '/supplier-bc/v1/suppliers', field: 'code' },
-    { path: '/inventory-bc/v1/products', field: 'sku' },
-    { path: '/inventory-bc/v1/item-groups', field: 'name_th' },
-    { path: '/inventory-bc/v1/uoms', field: 'name_th' },
-  ]
+const TARGETS: {
+  path: string
+  field: string
+  document?: SalesResource | PurchasingResource | FinanceResource
+  stock?: StockResource
+}[] = [
+  { path: '/finance-bc/v1/receipts', field: 'remark_th', document: 'receipts' },
+  { path: '/finance-bc/v1/ap-invoices', field: 'remark_th', document: 'ap-invoices' },
+  { path: '/inventory-bc/v1/stock-entries', field: 'remark_th', stock: 'stock-entries' },
+  { path: '/inventory-bc/v1/stock-adjustments', field: 'remark_th', stock: 'stock-adjustments' },
+  { path: '/sales-bc/v1/sales-returns', field: 'return_reason', document: 'sales-returns' },
+  { path: '/sales-bc/v1/delivery-notes', field: 'remark_th', document: 'delivery-notes' },
+  { path: '/inventory-bc/v1/purchase-returns', field: 'return_reason', document: 'purchase-returns' },
+  { path: '/inventory-bc/v1/goods-receipts', field: 'remark_th', document: 'goods-receipts' },
+  { path: '/supplier-bc/v1/purchase-orders', field: 'remark_th', document: 'purchase-orders' },
+  { path: '/sales-bc/v1/sales-orders', field: 'remark_th', document: 'sales-orders' },
+  { path: '/sales-bc/v1/quotations', field: 'remark_th', document: 'quotations' },
+  { path: '/sales-bc/v1/customers', field: 'code' },
+  { path: '/supplier-bc/v1/suppliers', field: 'code' },
+  { path: '/inventory-bc/v1/products', field: 'sku' },
+  { path: '/inventory-bc/v1/item-groups', field: 'name_th' },
+  { path: '/inventory-bc/v1/uoms', field: 'name_th' },
+]
 
 const env: Record<string, string> = existsSync('.env')
   ? Object.fromEntries(
@@ -112,7 +119,7 @@ async function cleanupStockDocuments() {
       }
     }
     console.log(
-      `${target.path}: ${active + unknown} active E2E record(s); ${cancelled} cancelled audit record(s) retained; ${unknown} unknown status record(s) skipped`,
+      `${target.path}: ${active + unknown} active E2E record(s); ${cancelled} ${auditLabel} audit record(s) retained; ${unknown} unknown status record(s) skipped`,
     )
   }
   for (const record of stockDocuments.sort((a, b) => stockPostingTime(b) - stockPostingTime(a))) {
@@ -202,12 +209,16 @@ for (const t of TARGETS) {
   const mine = rows
     .filter((r) => ownedKey(r).startsWith('E2E-'))
     .sort((a, b) => Number(b.attributes.type === 'bundle') - Number(a.attributes.type === 'bundle'))
+  if (t.document === 'receipts' || t.document === 'ap-invoices')
+    mine.sort((a, b) => financeCleanupOrder(a.attributes as { status: string }, b.attributes as { status: string }))
   if (t.document === 'goods-receipts') {
     for (const row of mine)
       if (row.attributes.status === 'SUBMITTED' && row.attributes.po_id)
         receiptDependentOrders.add(String(row.attributes.po_id))
   }
   const actionFor = (row: (typeof mine)[number]) => {
+    if (t.document === 'receipts' || t.document === 'ap-invoices')
+      return financeCleanupAction(t.document, row.attributes as { status: string })
     if (!APPLY && t.document === 'purchase-orders' && receiptDependentOrders.has(row.id)) return 'defer'
     if (t.document === 'purchase-orders' || t.document === 'goods-receipts' || t.document === 'purchase-returns')
       return purchasingCleanupAction(t.document, row.attributes as PurchasingCleanupRecord)
@@ -215,10 +226,12 @@ for (const t of TARGETS) {
   }
   const retained = mine.filter((r) => actionFor(r) === 'retain')
   const active = mine.filter((r) => actionFor(r) !== 'retain')
-  const cancelled = retained.filter((r) => r.attributes.status === 'CANCELLED').length
-  const terminal = retained.filter((r) => r.attributes.status !== 'CANCELLED')
+  const isAudit = (row: (typeof mine)[number]) => ['CANCELLED', 'VOID'].includes(String(row.attributes.status))
+  const cancelled = retained.filter(isAudit).length
+  const terminal = retained.filter((r) => !isAudit(r))
+  const auditLabel = t.document === 'receipts' ? 'void' : 'cancelled'
   console.log(
-    `${t.path}: ${active.length} ${t.document ? 'active ' : ''}E2E record(s)${t.document ? `; ${cancelled} cancelled audit record(s) retained; ${terminal.length} non-cancellable record(s) retained` : ''}${rows.length > mine.length ? ` (ignored ${rows.length - mine.length} non-E2E)` : ''}`,
+    `${t.path}: ${active.length} ${t.document ? 'active ' : ''}E2E record(s)${t.document ? `; ${cancelled} ${auditLabel} audit record(s) retained; ${terminal.length} non-cancellable record(s) retained` : ''}${rows.length > mine.length ? ` (ignored ${rows.length - mine.length} non-E2E)` : ''}`,
   )
   for (const r of terminal) {
     const relation =
@@ -226,7 +239,13 @@ for (const t of TARGETS) {
         ? 'PO current state / net received guard'
         : t.document === 'goods-receipts'
           ? `linked PO: ${String(r.attributes.po_id ?? 'none')}`
-          : `linked SO: ${Boolean(r.attributes.sales_order_id)}`
+          : t.document === 'purchase-returns'
+            ? `linked GR: ${String(r.attributes.grn_id ?? 'none')}`
+            : t.document === 'sales-returns'
+              ? `linked DN: ${String(r.attributes.dn_id ?? 'none')}`
+              : t.document === 'ap-invoices' || t.document === 'receipts'
+                ? `reference: ${String(r.attributes.reference_ap_invoice_id ?? r.attributes.reference_receipt_id ?? 'none')}`
+                : `linked SO: ${Boolean(r.attributes.sales_order_id)}`
     console.log(`  retained: ${ownedKey(r)} (${String(r.attributes.status)}, ${relation})`)
   }
   for (const r of active) {
@@ -251,16 +270,24 @@ for (const t of TARGETS) {
       continue
     }
     const cancel = actionFor(r) === 'cancel'
-    const del = await fetch(`${BASE}/api${t.path}/${r.id}${cancel ? '/cancel' : ''}`, {
-      method: cancel ? 'POST' : 'DELETE',
-      headers: { ...headers, ...(cancel ? { 'Content-Type': 'application/json' } : {}) },
-      ...(cancel ? { body: JSON.stringify({ cancel_reason: 'E2E- จบการทดสอบ' }) } : {}),
+    const voidDocument = actionFor(r) === 'void'
+    const writeAction = cancel ? 'cancel' : voidDocument ? 'void' : null
+    const del = await fetch(`${BASE}/api${t.path}/${r.id}${writeAction ? `/${writeAction}` : ''}`, {
+      method: writeAction ? 'POST' : 'DELETE',
+      headers: { ...headers, ...(writeAction ? { 'Content-Type': 'application/json' } : {}) },
+      ...(writeAction
+        ? {
+            body: JSON.stringify(
+              voidDocument ? { void_reason: 'E2E- จบการทดสอบ' } : { cancel_reason: 'E2E- จบการทดสอบ' },
+            ),
+          }
+        : {}),
     })
     if (!del.ok) failures += 1
     if (del.ok && cancel && t.document === 'goods-receipts' && r.attributes.po_id)
       reversedOrders.add(String(r.attributes.po_id))
     console.log(
-      `  ${del.ok ? (cancel ? '✓ cancelled (audit retained)' : '✓ deleted') : `✗ ${del.status}`} ${ownedKey(r)}`,
+      `  ${del.ok ? (writeAction ? `✓ ${writeAction} (audit retained)` : '✓ deleted') : `✗ ${del.status}`} ${ownedKey(r)}`,
     )
   }
 }

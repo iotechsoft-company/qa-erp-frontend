@@ -184,3 +184,4 @@ export * from './purchasing'
 export * from './stock'
 
 export * from './returns'
+export * from './finance'
