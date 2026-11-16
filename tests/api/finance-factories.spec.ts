@@ -25,15 +25,12 @@ test.describe('Finance factories ↔ DTO (API path)', { tag: ['@finance', '@api'
     test(
       `${kind}: draft update persists remark without posting`,
       {
-        annotation:
-          kind === 'ar'
-            ? { type: 'issue', description: 'https://github.com/iotechsoft-company/erp-api/issues/14' }
-            : { type: 'contract', description: 'AP draft update remains active; no failed write is retried' },
+        annotation: { type: 'issue', description: 'https://github.com/iotechsoft-company/erp-api/issues/14' },
       },
       async ({ allowMutation, api }) => {
         test.fixme(
-          kind === 'ar',
-          'erp-api#14: receipt PUT returned 404 after POST/GET; initial + 1/3 independent repeats',
+          true,
+          'erp-api#14: both Finance PUTs observed 404 after POST/GET (receipt 2/4, AP 1/10); no write retry',
         )
         void allowMutation
         const s = new FinanceScenario(api, kind)
