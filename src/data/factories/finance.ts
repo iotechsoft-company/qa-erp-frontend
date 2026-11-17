@@ -12,6 +12,9 @@ export type APInvoiceInput = FinanceDiscount & {
   document_date: string
   due_date?: string | null
   currency: string
+  currency_rate?: number
+  currency_date?: string
+  wht_config_code?: string | null
   is_vat_included: boolean
   vendor_tax_invoice_type: 'full_tax_invoice' | 'abbreviated_tax_invoice'
   remark_th: string
@@ -40,6 +43,9 @@ export type ReceiptInput = FinanceDiscount & {
   document_date: string
   due_date?: string | null
   currency: string
+  currency_rate?: number
+  currency_date?: string
+  wht_config_code?: string | null
   remark_th: string
   items: {
     product_id: string
