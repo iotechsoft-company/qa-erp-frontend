@@ -62,6 +62,7 @@ export type ScheduleRecord = {
 export class SettlementScenario {
   readonly finance: FinanceScenario
   readonly schedules = new Set<string>()
+  private readonly publishedStates = new Map<SettlementResource, Map<string, string>>()
   invoice!: FinanceRecord
   constructor(
     readonly api: ApiClient,
@@ -156,7 +157,12 @@ export class SettlementScenario {
       `${this.path(resource)}/${id}/${action}`,
       action === 'cancel' ? { cancel_reason: `${this.marker} ย้อนยอดทดสอบ` } : {},
     )
-    return { id: j.data.id, ...j.data.attributes }
+    const record = { id: j.data.id, ...j.data.attributes }
+    expect(record.status).toBe(action === 'issue' ? 'ISSUED' : action === 'submit' ? 'SUBMITTED' : 'CANCELLED')
+    const states = this.publishedStates.get(resource) ?? new Map<string, string>()
+    states.set(id, record.status)
+    this.publishedStates.set(resource, states)
+    return record
   }
   async aging() {
     return this.api.list<{
@@ -171,11 +177,19 @@ export class SettlementScenario {
     }>(`/finance-bc/v1/${this.kind === 'ap' ? 'ap-invoice-agings' : 'receipt-agings'}`, { party_id: this.partyId })
   }
   async records(resource: SettlementResource) {
-    return this.api.list<SettlementRecord>(this.path(resource), {
-      filter: `remark_th||$starts||${this.marker}`,
-      ignore_limit: 'true',
-      sort: 'created_at:DESC',
-    })
+    let rows: SettlementRecord[] = []
+    // A successful transition and its GL can be visible before the collection's header snapshot.
+    // Only read observations converge here; acknowledged writes are never replayed.
+    await expect(async () => {
+      rows = await this.api.list<SettlementRecord>(this.path(resource), {
+        filter: `remark_th||$starts||${this.marker}`,
+        ignore_limit: 'true',
+        sort: 'created_at:DESC',
+      })
+      for (const [id, status] of this.publishedStates.get(resource) ?? [])
+        expect(rows.find((row) => row.id === id)?.status, `Acknowledged ${resource}/${id}`).toBe(status)
+    }).toPass({ timeout: 10_000 })
+    return rows
   }
   async scheduleInvoice() {
     if (this.kind !== 'ar') throw new Error('Only receipt schedules are supported')
