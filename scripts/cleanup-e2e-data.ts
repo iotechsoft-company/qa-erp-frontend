@@ -9,6 +9,11 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { expect } from '@playwright/test'
 import { salesCleanupAction, type SalesCleanupRecord, type SalesResource } from '../src/data/sales-cleanup.ts'
+import {
+  SETTLEMENT_RESOURCES,
+  settlementCleanupAction,
+  type SettlementResource,
+} from '../src/data/settlement-cleanup.ts'
 import { financeCleanupAction, financeCleanupOrder, type FinanceResource } from '../src/data/finance-cleanup.ts'
 
 import {
@@ -31,7 +36,13 @@ const TARGETS: {
   field: string
   document?: SalesResource | PurchasingResource | FinanceResource
   stock?: StockResource
+  settlement?: SettlementResource
 }[] = [
+  ...SETTLEMENT_RESOURCES.map((settlement) => ({
+    path: `/finance-bc/v1/${settlement}`,
+    field: 'remark_th',
+    settlement,
+  })),
   { path: '/finance-bc/v1/receipts', field: 'remark_th', document: 'receipts' },
   { path: '/finance-bc/v1/ap-invoices', field: 'remark_th', document: 'ap-invoices' },
   { path: '/inventory-bc/v1/stock-entries', field: 'remark_th', stock: 'stock-entries' },
@@ -189,6 +200,7 @@ for (const t of TARGETS) {
   }
   const qs = new URLSearchParams({ filter: `${t.field}||$starts||E2E-`, ignore_limit: 'true' })
   if (t.document === 'sales-orders' || t.document === 'purchase-orders') qs.set('relations', 'items')
+  if (t.settlement) qs.set('sort', 'created_at:DESC')
   const res = await fetch(`${BASE}/api${t.path}?${qs}`, { headers })
   if (!res.ok) {
     failures += 1
@@ -216,7 +228,41 @@ for (const t of TARGETS) {
       if (row.attributes.status === 'SUBMITTED' && row.attributes.po_id)
         receiptDependentOrders.add(String(row.attributes.po_id))
   }
+  const settlementActions = new Map<string, 'delete' | 'cancel' | 'retain'>()
+  if (t.settlement)
+    for (const row of mine) {
+      try {
+        settlementActions.set(row.id, settlementCleanupAction(t.settlement, String(row.attributes.status)))
+      } catch (error) {
+        failures++
+        console.warn(`✗ ${t.path}/${row.id}: ${String(error)}`)
+        settlementActions.set(row.id, 'retain')
+      }
+    }
+  const blockedSchedules = new Set<string>()
+  if (t.document === 'receipts')
+    for (const row of mine.filter((r) => ownedKey(r).includes('[E2E-SCHEDULE]'))) {
+      try {
+        const path = `${BASE}/api${t.path}/${row.id}/payment-schedules`
+        const response = await fetch(path, { headers })
+        if (!response.ok) throw new Error(`schedule read: ${response.status}`)
+        const data = (await response.json()).data
+        if (!Array.isArray(data)) throw new Error('Invalid schedule response')
+        console.log(`${t.path}/${row.id}/payment-schedules: ${data.length} active owned child record(s)`)
+        if (data.length && APPLY) {
+          const removed = await fetch(path, { method: 'DELETE', headers })
+          if (!removed.ok) throw new Error(`schedule delete: ${removed.status}`)
+        } else if (data.length) failures++
+      } catch (error) {
+        failures++
+        blockedSchedules.add(row.id)
+        console.warn(`✗ schedules ${row.id}: ${String(error)}`)
+      }
+    }
+  const isDocument = Boolean(t.document || t.settlement)
   const actionFor = (row: (typeof mine)[number]) => {
+    if (t.settlement) return settlementActions.get(row.id) ?? 'retain'
+
     if (t.document === 'receipts' || t.document === 'ap-invoices')
       return financeCleanupAction(t.document, row.attributes as { status: string })
     if (!APPLY && t.document === 'purchase-orders' && receiptDependentOrders.has(row.id)) return 'defer'
@@ -231,7 +277,7 @@ for (const t of TARGETS) {
   const terminal = retained.filter((r) => !isAudit(r))
   const auditLabel = t.document === 'receipts' ? 'void' : 'cancelled'
   console.log(
-    `${t.path}: ${active.length} ${t.document ? 'active ' : ''}E2E record(s)${t.document ? `; ${cancelled} ${auditLabel} audit record(s) retained; ${terminal.length} non-cancellable record(s) retained` : ''}${rows.length > mine.length ? ` (ignored ${rows.length - mine.length} non-E2E)` : ''}`,
+    `${t.path}: ${active.length} ${isDocument ? 'active ' : ''}E2E record(s)${isDocument ? `; ${cancelled} ${auditLabel} audit record(s) retained; ${terminal.length} non-cancellable record(s) retained` : ''}${rows.length > mine.length ? ` (ignored ${rows.length - mine.length} non-E2E)` : ''}`,
   )
   for (const r of terminal) {
     const relation =
@@ -249,6 +295,7 @@ for (const t of TARGETS) {
     console.log(`  retained: ${ownedKey(r)} (${String(r.attributes.status)}, ${relation})`)
   }
   for (const r of active) {
+    if (blockedSchedules.has(r.id)) continue
     if (!APPLY && actionFor(r) === 'defer') {
       console.log(
         `  deferred: ${ownedKey(r)} (${r.id}); reassess PO state after linked GR cancellation succeeds, no cancellation assumed`,

@@ -69,9 +69,20 @@ export class ApiClient {
     return first.id
   }
 
+  async putResponse(path: string, data: unknown) {
+    return this.request.put(`/api${path}`, { headers: this.headers(), data })
+  }
+
   async put<T = unknown>(path: string, data: unknown) {
-    const res = await this.request.put(`/api${path}`, { headers: this.headers(), data })
+    const res = await this.putResponse(path, data)
     if (!res.ok()) throw new Error(`PUT ${path} → ${res.status()} ${await res.text()}`)
+    return (await res.json()) as T
+  }
+
+  /** Billing/payment update routes are PATCH in the current OpenAPI, not PUT. */
+  async patch<T = unknown>(path: string, data: unknown) {
+    const res = await this.request.patch(`/api${path}`, { headers: this.headers(), data })
+    if (!res.ok()) throw new Error(`PATCH ${path} → ${res.status()} ${await res.text()}`)
     return (await res.json()) as T
   }
 

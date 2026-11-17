@@ -185,3 +185,4 @@ export * from './stock'
 
 export * from './returns'
 export * from './finance'
+export * from './settlements'
