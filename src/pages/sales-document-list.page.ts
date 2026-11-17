@@ -77,7 +77,12 @@ export abstract class SalesDocumentListPage extends BasePage {
       label,
     )
     this.selectedStatus = label
-    expect((await result).ok()).toBe(true)
+    const response = await result
+    expect(response.ok()).toBe(true)
+    const json = (await response.json()) as { data: { attributes: Record<string, string> }[] }
+    await expect
+      .poll(() => this.dataTable.readColumn(this.config.numberColumn))
+      .toEqual(json.data.map((row) => row.attributes[this.config.numberField]))
   }
   /** User-visible pagination fallback while the app's document search is broken. */
   async findRecord(number: string) {

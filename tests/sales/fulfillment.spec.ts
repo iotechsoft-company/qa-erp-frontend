@@ -45,6 +45,7 @@ test.describe('Sales fulfillment business workflow', { tag: ['@sales', '@regress
       expect(await s.costs()).toEqual([])
       expect(await s.profits()).toEqual([])
       await deliveryNotesPage.goto()
+      await deliveryNotesPage.filterStatus('ฉบับร่าง', 'DRAFT')
       await deliveryNotesPage.findRecord(draft.dn_number)
       const submitted = await deliveryNotesPage.submit(draft.dn_number)
       expect(submitted.data.attributes.status).toBe('SUBMITTED')
@@ -75,6 +76,7 @@ test.describe('Sales fulfillment business workflow', { tag: ['@sales', '@regress
       }).toPass({ timeout: 10_000 })
       await expectFinancial(s, draft.items[0]!.id, [{ lotId: s.stock.lots[0]!.id, qty: 1, unitCost: 100 }], 150)
       await deliveryNotesPage.goto()
+      await deliveryNotesPage.filterStatus('ยืนยันส่งแล้ว', 'SUBMITTED')
       await deliveryNotesPage.findRecord(draft.dn_number)
       await deliveryNotesPage.cancel(draft.dn_number, `${s.sales.marker} คืนยอดหลังทดสอบ`)
       await expect.poll(() => s.stock.inventory.stockQty()).toBe(1)
@@ -127,6 +129,8 @@ test.describe('Sales fulfillment business workflow', { tag: ['@sales', '@regress
         lot: (typeof allocations)[number],
       ) => {
         await deliveryNotesPage.goto()
+        // Scope real UI pagination to actionable notes rather than the growing cancelled audit history.
+        await deliveryNotesPage.filterStatus('ฉบับร่าง', 'DRAFT')
         await deliveryNotesPage.findRecord(draft.dn_number)
         await deliveryNotesPage.submit(draft.dn_number)
         await expect.poll(() => s.stock.inventory.stockQty()).toBe(2 - delivered)
@@ -157,6 +161,7 @@ test.describe('Sales fulfillment business workflow', { tag: ['@sales', '@regress
         [first, allocations[0]!, 2, 'CONFIRMED'],
       ] as const) {
         await deliveryNotesPage.goto()
+        await deliveryNotesPage.filterStatus('ยืนยันส่งแล้ว', 'SUBMITTED')
         await deliveryNotesPage.findRecord(draft.dn_number)
         await deliveryNotesPage.cancel(draft.dn_number, `${s.sales.marker} คืนยอดส่งบางส่วน`)
         await expectFinancialReversed(s, draft.items[0]!.id, lot.unitCost)
@@ -188,11 +193,13 @@ test.describe('Sales fulfillment business workflow', { tag: ['@sales', '@regress
       const order = await s.newOrder(1)
       expect(order.status).toBe('PENDING_APPROVAL')
       await salesOrdersPage.goto()
+      await salesOrdersPage.filterStatus('รออนุมัติ', 'PENDING_APPROVAL')
       await salesOrdersPage.findRecord(order.so_number)
       await salesOrdersPage.approve(order.so_number)
       expect((await s.order(order.id)).status).toBe('CONFIRMED')
       const draft = await s.draft(order, 1)
       await deliveryNotesPage.goto()
+      await deliveryNotesPage.filterStatus('ฉบับร่าง', 'DRAFT')
       await deliveryNotesPage.findRecord(draft.dn_number)
       const held = await deliveryNotesPage.submit(draft.dn_number)
       expect(held.data.attributes).toMatchObject({
@@ -204,12 +211,14 @@ test.describe('Sales fulfillment business workflow', { tag: ['@sales', '@regress
       expect(await s.costs()).toEqual([])
       expect(await s.profits()).toEqual([])
       await deliveryNotesPage.goto()
+      await deliveryNotesPage.filterStatus('รออนุมัติ', 'PENDING_APPROVAL')
       await deliveryNotesPage.findRecord(draft.dn_number)
       const approved = await deliveryNotesPage.approve(draft.dn_number)
       expect(approved.data.attributes.status).toBe('SUBMITTED')
       await expect.poll(() => s.stock.inventory.stockQty()).toBe(0)
       await expectFinancial(s, draft.items[0]!.id, [{ lotId: s.stock.lots[0]!.id, qty: 1, unitCost: 100 }], 150)
       await deliveryNotesPage.goto()
+      await deliveryNotesPage.filterStatus('ยืนยันส่งแล้ว', 'SUBMITTED')
       await deliveryNotesPage.findRecord(draft.dn_number)
       await deliveryNotesPage.cancel(draft.dn_number, `${s.sales.marker} คืนยอดเครดิต`)
       await expectFinancialReversed(s, draft.items[0]!.id, 100)
@@ -242,6 +251,7 @@ test.describe('Sales fulfillment business workflow', { tag: ['@sales', '@regress
         const before = stableReadFields({ lots: await s.lots(), costs: await s.costs(), profits: await s.profits() })
 
         await quotationsPage.goto()
+        await quotationsPage.filterStatus('ลูกค้าอนุมัติแล้ว', 'APPROVED')
         await quotationsPage.findRecord(quote.quotation_number!)
         const response = await quotationsPage.attemptConvert(quote.quotation_number!, quote.id)
         await expectRejection(
@@ -278,6 +288,7 @@ test.describe('Sales fulfillment business workflow', { tag: ['@sales', '@regress
       const draft = await s.draft(order, 1)
       const before = await s.businessSnapshot(order.id)
       await deliveryNotesPage.goto()
+      await deliveryNotesPage.filterStatus('ฉบับร่าง', 'DRAFT')
       await deliveryNotesPage.findRecord(draft.dn_number)
       const rejected = await deliveryNotesPage.attemptSubmit(draft.dn_number, draft.id)
       await expectRejection(
