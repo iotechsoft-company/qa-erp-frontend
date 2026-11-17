@@ -8,8 +8,17 @@ async function removeSupplier(api: ApiClient, id: string) {
   if (id) await api.delete(`/supplier-bc/v1/suppliers/${id}`)
 }
 async function cleanupWithSupplier(s: FinanceScenario, id: string) {
-  const results = await Promise.allSettled([removeSupplier(s.api, id), s.cleanup()])
-  const errors = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []))
+  const errors: unknown[] = []
+  const attempt = async (run: () => Promise<void>) => {
+    try {
+      await run()
+    } catch (error) {
+      errors.push(error)
+    }
+  }
+  if (id) await attempt(() => s.cleanupParty(id))
+  await attempt(() => s.cleanup())
+  await attempt(() => removeSupplier(s.api, id))
   if (errors.length) throw new AggregateError(errors, 'Finance and secondary supplier cleanup failed')
 }
 

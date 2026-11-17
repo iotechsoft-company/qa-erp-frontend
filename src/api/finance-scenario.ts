@@ -21,6 +21,10 @@ export type FinanceRecord = {
   vat_amount: number
   net_amount: number
   total: number
+  currency: string
+  currency_rate: number
+  raw_total: number
+  raw_total_wht: number
   total_wht: number
   sub_total: number
   total_discount: number
@@ -158,30 +162,38 @@ export class FinanceScenario {
       sort: 'created_at:DESC',
     })
   }
+  /** Only the E2E marker plus the explicitly owned party can authorize reversal. */
+  async cleanupParty(partyId = this.partyId) {
+    const errors: unknown[] = []
+    for (const row of (await this.records())
+      .filter((row) => (this.kind === 'ap' ? row.supplier_id : row.customer_id) === partyId)
+      .sort(financeCleanupOrder)) {
+      try {
+        if (!row.remark?.th?.startsWith(this.marker)) throw new Error('Refusing cleanup of unowned finance document')
+        const action = financeCleanupAction(this.resource, row)
+        if (action === 'delete') await this.api.delete(`${this.path}/${row.id}`)
+        else if (action !== 'retain') await this.action(row.id, action)
+        await expect(async () => {
+          const lines = await this.ledger(row.id)
+          for (const account of new Set(lines.map((line) => line.account_id)))
+            expect(
+              Math.round(
+                lines
+                  .filter((line) => line.account_id === account)
+                  .reduce((sum, line) => sum + line.debit - line.credit, 0) * 10_000,
+              ),
+            ).toBe(0)
+        }).toPass({ timeout: 10_000 })
+      } catch (error) {
+        errors.push(error)
+      }
+    }
+    if (errors.length) throw new AggregateError(errors, 'Owned party finance cleanup failed')
+  }
   async cleanup() {
     const errors: unknown[] = []
     try {
-      for (const row of (await this.records()).sort(financeCleanupOrder)) {
-        try {
-          if (
-            !row.remark?.th?.startsWith(this.marker) ||
-            (this.kind === 'ap' ? row.supplier_id : row.customer_id) !== this.partyId
-          )
-            throw new Error('Refusing cleanup of unowned finance document')
-          const action = financeCleanupAction(this.resource, row)
-          if (action === 'delete') await this.api.delete(`${this.path}/${row.id}`)
-          else if (action !== 'retain') await this.action(row.id, action)
-          const lines = await this.ledger(row.id)
-          for (const account of new Set(lines.map((l) => l.account_id)))
-            expect(
-              Math.round(
-                lines.filter((l) => l.account_id === account).reduce((sum, l) => sum + l.debit - l.credit, 0) * 10_000,
-              ),
-            ).toBe(0)
-        } catch (error) {
-          errors.push(error)
-        }
-      }
+      await this.cleanupParty()
     } catch (error) {
       errors.push(error)
     }
