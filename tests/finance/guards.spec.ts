@@ -32,49 +32,48 @@ test.describe(
       const prefix = kind === 'ap' ? 'AP invoice' : 'Receipt'
       const postedState = kind === 'ap' ? 'SUBMITTED' : 'ISSUED'
       const terminal = kind === 'ap' ? 'CANCELLED' : 'VOID'
+      const sourceInputFor = {
+        ap: (scenario: FinanceScenario) => scenario.input(),
+        ar: (scenario: FinanceScenario) => scenario.linkedReceiptInput(),
+      }[kind]
       const overMessage = (line: string) =>
-        kind === 'ap'
-          ? `Cannot invoice 5 of goods receipt item '${line}': only 4 of the 4 received remain un-invoiced (0 already invoiced).`
-          : `Cannot invoice 5 of delivered line '${line}': only 4 of the 4 delivered remain un-invoiced (0 already invoiced).`
+        `Cannot invoice 5 of goods receipt item '${line}': only 4 of the 4 received remain un-invoiced (0 already invoiced).`
       const inputFor = (s: FinanceScenario, qty: number) =>
-        kind === 'ap'
-          ? s.apInput({ items: [{ grn_item_id: s.source.source.items[0]!.id, qty, unit_cost: 40 }] })
-          : s.receiptInput({
-              items: [{ product_id: s.productId, dn_item_id: s.source.source.items[0]!.id, qty, unit_price: 150 }],
-            })
+        s.apInput({ items: [{ grn_item_id: s.source.source.items[0]!.id, qty, unit_cost: 40 }] })
 
-      test(`${kind}: over-invoicing is rejected at create and authoritative submit/issue recheck`, async ({
-        allowMutation,
-        api,
-      }) => {
-        void allowMutation
-        const s = new FinanceScenario(api, kind)
-        try {
-          await s.seed()
-          const line = s.source.source.items[0]!.id
-          const input = (qty: number) => inputFor(s, qty)
-          const before = await snapshot(s)
-          await rejected(await api.postResponse(s.path, input(5)), 409, overMessage(line))
-          expect(await snapshot(s)).toEqual(before)
-          const first = await s.create(input(3)),
-            second = await s.create(input(2))
-          const action = post
-          const posted = await s.action(first.id, action)
-          await posting(s, posted)
-          const after = await snapshot(s)
-          await rejected(
-            await api.postResponse(`${s.path}/${second.id}/${action}`, {}),
-            409,
-            kind === 'ap'
-              ? `Cannot invoice 2 of goods receipt item '${line}': only 1 remain un-invoiced — another invoice was submitted against this receipt in the meantime.`
-              : `Cannot invoice 2 of delivered line '${line}': only 1 remain un-invoiced — another receipt was issued against this delivery in the meantime.`,
-          )
-          expect((await s.read(second.id)).status).toBe('DRAFT')
-          expect(await snapshot(s)).toEqual(after)
-        } finally {
-          await s.cleanup()
-        }
-      })
+      // BE-14 owns DN invoicing; explicit source-quantity invoice drafts remain an AP path.
+      if (kind === 'ap') {
+        test(`${kind}: over-invoicing is rejected at create and authoritative submit recheck`, async ({
+          allowMutation,
+          api,
+        }) => {
+          void allowMutation
+          const s = new FinanceScenario(api, kind)
+          try {
+            await s.seed()
+            const line = s.source.source.items[0]!.id
+            const input = (qty: number) => inputFor(s, qty)
+            const before = await snapshot(s)
+            await rejected(await api.postResponse(s.path, input(5)), 409, overMessage(line))
+            expect(await snapshot(s)).toEqual(before)
+            const first = await s.create(input(3)),
+              second = await s.create(input(2))
+            const action = post
+            const posted = await s.action(first.id, action)
+            await posting(s, posted)
+            const after = await snapshot(s)
+            await rejected(
+              await api.postResponse(`${s.path}/${second.id}/${action}`, {}),
+              409,
+              `Cannot invoice 2 of goods receipt item '${line}': only 1 remain un-invoiced — another invoice was submitted against this receipt in the meantime.`,
+            )
+            expect((await s.read(second.id)).status).toBe('DRAFT')
+            expect(await snapshot(s)).toEqual(after)
+          } finally {
+            await s.cleanup()
+          }
+        })
+      }
 
       test(`${kind}: DRAFT source cannot be billed; duplicate lines and zero qty have no side effects`, async ({
         allowMutation,
@@ -85,16 +84,17 @@ test.describe(
         try {
           await s.seed(false)
           const source = s.source.source
+          const sourceInput = sourceInputFor(s)
           const before = await snapshot(s)
           await rejected(
-            await api.postResponse(s.path, s.input()),
+            await api.postResponse(s.path, sourceInput),
             400,
             kind === 'ap'
               ? `Goods receipt '${source.grn_number}' has status 'DRAFT' — only a SUBMITTED receipt represents goods actually received and therefore billable.`
               : `Delivery note '${source.dn_number}' has status 'DRAFT' — only a SUBMITTED delivery represents goods actually shipped and therefore invoiceable.`,
           )
           expect(await snapshot(s)).toEqual(before)
-          const input = s.input()
+          const input = sourceInput
           const duplicate = { ...input, items: [input.items[0]!, input.items[0]!] }
           const line = source.items[0]!.id
           await rejected(

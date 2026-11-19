@@ -46,7 +46,6 @@ test.describe('Finance totals and tax snapshots (API path)', { tag: ['@finance',
                 items: [
                   {
                     product_id: s.productId,
-                    dn_item_id: s.source.source.items[0]!.id,
                     qty,
                     unit_price: unit,
                     discount_type: 'amount',

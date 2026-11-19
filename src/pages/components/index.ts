@@ -40,9 +40,8 @@ export class DataTable {
       .locator('tbody')
       .getByRole('row')
       .filter({ has: this.page.getByRole('cell').nth(headers.length - 1) })
-    const values: string[] = []
-    for (const row of await rows.all()) values.push(await row.getByRole('cell').nth(index).innerText())
-    return values
+    // Keep each lookup scoped to its row, but avoid serial browser round trips.
+    return Promise.all((await rows.all()).map((row) => row.getByRole('cell').nth(index).innerText()))
   }
 
   async sort(column: string) {
