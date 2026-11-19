@@ -8,6 +8,10 @@ export type FulfillmentOrder = Omit<SalesRecord, 'items'> & {
   quotation_id: string
   customer_id: string
   so_number: string
+  is_vat_included: boolean
+  vat_rate: number
+  vat_amount: number
+  net_amount: number
   total: number
   items: {
     id: string
