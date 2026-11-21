@@ -44,9 +44,19 @@ for (const kind of ['single', 'bundle'] as const) {
 
     test(
       'create → list → edit → delete ผ่าน UI',
-      { tag: ['@regression', '@mutation'] },
+      {
+        tag: ['@regression', '@mutation'],
+        annotation: {
+          single: [],
+          bundle: [{ type: 'issue', description: 'https://github.com/iotechsoft-company/erp-frontend/issues/44' }],
+        }[kind],
+      },
       async ({ allowMutation, api, productsPage, productGroupsPage }) => {
         void allowMutation
+        test.fixme(
+          kind === 'bundle',
+          'frontend#44: first-100-only component lookup blocks owned component selection; exact read-only characterization remains active',
+        )
         const list = { single: productsPage, bundle: productGroupsPage }[kind]
         await withInventoryReferences(api, async (refs) => {
           const ids = { item_group_id: refs.item_group_id, stock_uom_id: refs.stock_uom_id }

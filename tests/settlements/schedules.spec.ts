@@ -62,7 +62,6 @@ test.describe(
             items: [
               {
                 product_id: s.finance.productId,
-                dn_item_id: s.finance.source.source.items[0]!.id,
                 qty: 1,
                 unit_price: 15,
               },

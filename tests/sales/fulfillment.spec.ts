@@ -1,7 +1,7 @@
 import { SalesFulfillmentScenario } from '@api/sales-fulfillment-scenario'
 import { expect, test } from '@fixtures/test'
 import { stableReadFields } from '../purchasing/receiving-support'
-import { expectFinancial, expectFinancialReversed, expectRejection } from './fulfillment-support'
+import { expectFinancial, expectFinancialReversed, expectRejection, money, salePrice } from './fulfillment-support'
 
 test.describe('Sales fulfillment business workflow', { tag: ['@sales', '@regression', '@mutation'] }, () => {
   test('UI QT→SO→draft DN→submit→stock/COGS/profit→cancel reversal', async ({
@@ -30,10 +30,12 @@ test.describe('Sales fulfillment business workflow', { tag: ['@sales', '@regress
         data: { attributes: { status: string; sales_order_id: string; remark: { th: string } } }
       }>(`/sales-bc/v1/quotations/${order.quotation_id}`)
       expect(draft.status).toBe('DRAFT')
+      expect(order.is_vat_included).toEqual(expect.any(Boolean))
+      const pricing = salePrice(150, order.vat_rate, order.is_vat_included)
       expect(order).toMatchObject({
         status: 'CONFIRMED',
         customer_id: s.sales.customerId,
-        total: 150,
+        ...pricing,
         items: [expect.objectContaining({ product_id: s.sales.productId, qty: 1, delivered_qty: 0, line_total: 150 })],
       })
       expect(quote.data.attributes).toMatchObject({
@@ -68,13 +70,18 @@ test.describe('Sales fulfillment business workflow', { tag: ['@sales', '@regress
           expect.objectContaining({
             sale_id: draft.items[0]!.id,
             customer_id: s.sales.customerId,
-            revenue: 150,
+            revenue: pricing.net_amount,
             cogs: 100,
-            gross_profit: 50,
+            gross_profit: money(pricing.net_amount - 100),
           }),
         ])
       }).toPass({ timeout: 10_000 })
-      await expectFinancial(s, draft.items[0]!.id, [{ lotId: s.stock.lots[0]!.id, qty: 1, unitCost: 100 }], 150)
+      await expectFinancial(
+        s,
+        draft.items[0]!.id,
+        [{ lotId: s.stock.lots[0]!.id, qty: 1, unitCost: 100 }],
+        pricing.net_amount,
+      )
       await deliveryNotesPage.goto()
       await deliveryNotesPage.filterStatus('ยืนยันส่งแล้ว', 'SUBMITTED')
       await deliveryNotesPage.findRecord(draft.dn_number)

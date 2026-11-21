@@ -11,6 +11,8 @@ export type FinanceRecord = {
   vendor_document_number?: string
   supplier_id?: string
   customer_id?: string
+  delivery_note_id?: string | null
+  is_issued_on_delivery?: boolean
   reference_ap_invoice_id?: string | null
   reference_receipt_id?: string | null
   adjustment_reason?: string | null
@@ -59,6 +61,7 @@ export class FinanceScenario {
   readonly resource: FinanceResource
   readonly accounts = new Map<string, string>()
   vatRate = 0
+  deliveryInvoice?: FinanceRecord
   constructor(
     readonly api: ApiClient,
     readonly kind: 'ap' | 'ar',
@@ -75,8 +78,53 @@ export class FinanceScenario {
   get partyId() {
     return this.kind === 'ap' ? this.source.inventory.supplierId : this.source.fulfillment!.sales.customerId
   }
-  async seed(submitSource = true) {
+  async seed(submitSource = true, options: { keepDeliveryInvoice?: boolean } = {}) {
     await this.source.seed(submitSource)
+    if (this.kind === 'ar' && submitSource) {
+      // BE-14 invoices every submitted DN. Manual-document scenarios explicitly
+      // reverse only this owned invoice before taking their zero-debt baseline.
+      await expect(async () => {
+        const rows = await this.api.list<FinanceRecord>(this.path, {
+          filter: `delivery_note_id||$eq||${this.source.source.id}`,
+          ignore_limit: 'true',
+        })
+        const automatic = rows.filter((row) => row.is_issued_on_delivery)
+        expect(automatic).toHaveLength(1)
+        const doc = await this.read(automatic[0]!.id)
+        expect(doc).toMatchObject({
+          status: 'ISSUED',
+          is_issued_on_delivery: true,
+          delivery_note_id: this.source.source.id,
+          customer_id: this.partyId,
+        })
+        expect(doc.remark.th).toMatch(new RegExp(`^${this.source.fulfillment!.sales.marker}`))
+        expect(doc.items.map((item) => item.dn_item_id).sort()).toEqual(
+          this.source.source.items.map((item) => item.id).sort(),
+        )
+        this.deliveryInvoice = doc
+      }).toPass({ timeout: 10_000 })
+      if (!options.keepDeliveryInvoice) {
+        this.deliveryInvoice = await this.action(this.deliveryInvoice!.id, 'void')
+        await expect(async () => {
+          const lines = await this.ledger(this.deliveryInvoice!.id)
+          expect(lines.length).toBeGreaterThan(0)
+          for (const account of new Set(lines.map((line) => line.account_id)))
+            expect(
+              Math.round(
+                lines
+                  .filter((line) => line.account_id === account)
+                  .reduce((sum, line) => sum + line.debit - line.credit, 0) * 10_000,
+              ),
+            ).toBe(0)
+          const aging = await this.api.list<{ customer_id: string; net_total: number }>(
+            '/finance-bc/v1/receipt-agings',
+            { party_id: this.partyId },
+          )
+          for (const row of aging) expect(row.customer_id).toBe(this.partyId)
+          expect(aging.reduce((sum, row) => sum + row.net_total, 0)).toBe(0)
+        }).toPass({ timeout: 10_000 })
+      }
+    }
     const accounts = await this.api.list<{ account_role: string; is_active: boolean }>('/finance-bc/v1/gl-accounts', {
       ignore_limit: 'true',
     })
@@ -107,16 +155,24 @@ export class FinanceScenario {
       { remark_th: `${this.marker} ใบแจ้งหนี้อุปกรณ์`, ...overrides },
     )
   }
+  /** Standalone manual document; a submitted DN already owns its automatic invoice. */
   receiptInput(overrides: Partial<ReceiptInput> = {}) {
     return buildReceipt(
       { customer_id: this.partyId, product_id: this.productId },
       {
-        delivery_note_id: this.source.source.id,
         remark_th: `${this.marker} ใบกำกับอุปกรณ์`,
-        items: [{ dn_item_id: this.source.source.items[0]!.id, product_id: this.productId, qty: 1, unit_price: 150 }],
+        items: [{ product_id: this.productId, qty: 1, unit_price: 150 }],
         ...overrides,
       },
     )
+  }
+  /** Only for asserting source/duplicate guards; BE-14 owns a submitted DN's invoice. */
+  linkedReceiptInput(overrides: Partial<ReceiptInput> = {}) {
+    return this.receiptInput({
+      delivery_note_id: this.source.source.id,
+      items: [{ dn_item_id: this.source.source.items[0]!.id, product_id: this.productId, qty: 1, unit_price: 150 }],
+      ...overrides,
+    })
   }
   input() {
     return this.kind === 'ap' ? this.apInput() : this.receiptInput()

@@ -32,20 +32,42 @@ export class DeliveryNotesPage extends SalesDocumentListPage {
     expect((await result).ok()).toBe(true)
     await expect(this.details).toBeHidden()
   }
-  /** Attempt through the UI, preserving an expected domain-error response for guard assertions. */
+  private async confirmedResponse(number: string, action: 'submit' | 'approve', id?: string) {
+    const labels = {
+      submit: { row: 'ยืนยันส่ง', title: 'ยืนยันการส่งของ', confirm: 'ยืนยันส่งของ' },
+      approve: { row: 'อนุมัติ', title: 'ยืนยันการอนุมัติ', confirm: 'ยืนยันอนุมัติ' },
+    }[action]
+    await this.dataTable.row(number).getByRole('button', { name: labels.row, exact: true }).click()
+    const dialog = this.page.getByRole('dialog').filter({
+      has: this.page.getByRole('heading', { name: labels.title, exact: true }),
+    })
+    await expect(dialog).toBeVisible()
+    await expect(dialog).toContainText(number)
+    const result = this.page.waitForResponse((res) => {
+      const path = new URL(res.url()).pathname
+      const matches = id
+        ? path === `${this.endpoint}/${id}/${action}`
+        : path.startsWith(`${this.endpoint}/`) && path.endsWith(`/${action}`)
+      return matches && res.request().method() === 'POST'
+    })
+    await dialog.getByRole('button', { name: labels.confirm, exact: true }).click()
+    const response = await result
+    await expect(dialog).toBeHidden()
+    return response
+  }
+  /** Preserve the actual rejection for stock/state guard assertions after UI confirmation. */
   async attemptSubmit(number: string, id: string) {
-    const result = this.page.waitForResponse(
-      (res) =>
-        new URL(res.url()).pathname === `/api/sales-bc/v1/delivery-notes/${id}/submit` &&
-        res.request().method() === 'POST',
-    )
-    await this.dataTable.row(number).getByRole('button', { name: 'ยืนยันส่ง', exact: true }).click()
-    return result
+    return this.confirmedResponse(number, 'submit', id)
+  }
+  private async postConfirmed(number: string, action: 'submit' | 'approve') {
+    const response = await this.confirmedResponse(number, action)
+    expect(response.ok()).toBe(true)
+    return response.json() as Promise<{ data: { id: string; attributes: Record<string, unknown> } }>
   }
   async submit(number: string) {
-    return this.action(number, 'ยืนยันส่ง', 'submit')
+    return this.postConfirmed(number, 'submit')
   }
   async approve(number: string) {
-    return this.action(number, 'อนุมัติ', 'approve')
+    return this.postConfirmed(number, 'approve')
   }
 }

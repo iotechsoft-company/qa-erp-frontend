@@ -1,6 +1,14 @@
 import { type SalesFulfillmentScenario } from '@api/sales-fulfillment-scenario'
 import { expect } from '@fixtures/test'
 
+// Wire money is numeric(18,4); profit excludes VAT even when the UI keys a gross price.
+export const money = (value: number) => Math.round((value + Number.EPSILON) * 10_000) / 10_000
+export function salePrice(amount: number, vatRate: number, included: boolean) {
+  const net = money(included ? amount / (1 + vatRate / 100) : amount)
+  const vat = money(included ? amount - net : (net * vatRate) / 100)
+  return { net_amount: net, vat_amount: vat, total: money(net + vat) }
+}
+
 export async function expectFinancial(
   s: SalesFulfillmentScenario,
   saleId: string,
@@ -30,9 +38,9 @@ export async function expectFinancial(
           sale_id: saleId,
           customer_id: s.sales.customerId,
           lot_id: allocation.lotId,
-          revenue: (revenue * allocation.qty) / qty,
+          revenue: money((revenue * allocation.qty) / qty),
           cogs: allocation.qty * allocation.unitCost,
-          gross_profit: (revenue * allocation.qty) / qty - allocation.qty * allocation.unitCost,
+          gross_profit: money(money((revenue * allocation.qty) / qty) - allocation.qty * allocation.unitCost),
         }),
       )
     }

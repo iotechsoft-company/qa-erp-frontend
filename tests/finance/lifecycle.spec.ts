@@ -73,23 +73,22 @@ test.describe(
       }
     })
 
-    test('C1 tax invoice → C2 CN/DN → void: original taxes, AR and balanced GL conserve money; stock stays unchanged', async ({
+    test('C1 DN automatic tax invoice → C2 CN/DN → void: original taxes, AR and GL conserve money', async ({
       allowMutation,
       api,
     }) => {
       void allowMutation
       const s = new FinanceScenario(api, 'ar')
       try {
-        await s.seed()
-        const original = await s.create(
-          s.receiptInput({
-            items: [{ product_id: s.productId, dn_item_id: s.source.source.items[0]!.id, qty: 4, unit_price: 150 }],
-          }),
-        )
-        expect(original.document_number).toBeNull()
-        expect(await s.ledger(original.id)).toEqual([])
-        await debt(s, 0)
-        const issued = await s.action(original.id, 'issue')
+        await s.seed(true, { keepDeliveryInvoice: true })
+        const original = s.deliveryInvoice!
+        const issued = original
+        expect(issued).toMatchObject({
+          is_issued_on_delivery: true,
+          delivery_note_id: s.source.source.id,
+          customer_id: s.partyId,
+        })
+        expect(issued.items[0]!.dn_item_id).toBe(s.source.source.items[0]!.id)
         expect(issued).toMatchObject({
           status: 'ISSUED',
           net_amount: 600,

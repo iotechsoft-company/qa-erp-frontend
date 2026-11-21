@@ -11,6 +11,7 @@ test.describe('Delivery notes', { tag: ['@sales', '@regression', '@mutation'] },
       const order = await scenario.createOrder()
       const note = await api.create<{ dn_number: string }>('/sales-bc/v1/delivery-notes', scenario.deliveryInput(order))
       await deliveryNotesPage.goto()
+      await deliveryNotesPage.filterStatus('ฉบับร่าง', 'DRAFT')
       await deliveryNotesPage.findRecord(note.dn_number)
       await deliveryNotesPage.openDetails(note.dn_number)
       await expect(deliveryNotesPage.details).toContainText(scenario.customer.name_th)
@@ -22,6 +23,7 @@ test.describe('Delivery notes', { tag: ['@sales', '@regression', '@mutation'] },
       await deliveryNotesPage.closeDetails()
       await deliveryNotesPage.cancel(note.dn_number, `${scenario.marker} เลื่อนกำหนดจัดส่ง`)
       await deliveryNotesPage.goto()
+      await deliveryNotesPage.filterStatus('ยกเลิกแล้ว', 'CANCELLED')
       await deliveryNotesPage.findRecord(note.dn_number)
       await expect(deliveryNotesPage.dataTable.row(note.dn_number)).toContainText('ยกเลิกแล้ว')
       await expect(
@@ -104,6 +106,7 @@ test.describe('Delivery notes', { tag: ['@sales', '@regression', '@mutation'] },
           scenario.deliveryInput(order),
         )
         await deliveryNotesPage.goto()
+        await deliveryNotesPage.filterStatus('ฉบับร่าง', 'DRAFT')
         await deliveryNotesPage.findRecord(note.dn_number)
         await expect(deliveryNotesPage.dataTable.row(note.dn_number)).toContainText('ฉบับร่าง')
         await deliveryNotesPage.openDetails(note.dn_number)
